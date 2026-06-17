@@ -4,10 +4,14 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   buildErc20BalanceCheckRequest,
   buildErc20TransferRequest,
+  buildRuneTransferPsbtRequest,
   verifyErc20TransferReceipt,
   type Erc20BalanceCheckRequest,
   type Erc20TransactionReceiptLike,
   type Erc20TransferRequest,
+  type BitcoinNetwork,
+  type RuneTransferPsbtRequest,
+  type RuneUtxo,
 } from "@redeemloop/adapters";
 import {
   type CommerceTarget,
@@ -742,7 +746,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
           asset,
           amount: asset.requiredAmount,
           settlementPolicy: next.settlementPolicy,
-          evm: buildTenderTransferRequest(next, asset),
+          ...buildTenderTransferRequest(next, asset, body),
         },
       };
     } catch (error) {
@@ -1730,14 +1734,39 @@ function moveIntentTo(intent: RedeemLoopPaymentIntent, status: PaymentIntentStat
   return intent;
 }
 
-function buildTenderTransferRequest(intent: RedeemLoopPaymentIntent, asset: VoucherAssetDescriptor): Erc20TransferRequest | undefined {
-  if (asset.chainNamespace !== "eip155" || asset.assetType !== "erc20") return undefined;
-  return buildErc20TransferRequest({
-    from: intent.payerAddress,
-    to: intent.merchantVault,
-    asset,
-    amount: asset.requiredAmount,
-  });
+function buildTenderTransferRequest(
+  intent: RedeemLoopPaymentIntent,
+  asset: VoucherAssetDescriptor,
+  input: Record<string, unknown>,
+): { evm?: Erc20TransferRequest; bitcoin?: RuneTransferPsbtRequest } {
+  if (asset.chainNamespace === "eip155" && asset.assetType === "erc20") {
+    return {
+      evm: buildErc20TransferRequest({
+        from: intent.payerAddress,
+        to: intent.merchantVault,
+        asset,
+        amount: asset.requiredAmount,
+      }),
+    };
+  }
+  if ((asset.chainNamespace === "bitcoin" || asset.chainNamespace === "fractal") && asset.assetType === "rune") {
+    const from = optionalString(input.payerAddress, "payerAddress") ?? intent.payerAddress;
+    if (!from) throw new Error("payerAddress is required for Rune PSBT requests");
+    return {
+      bitcoin: buildRuneTransferPsbtRequest({
+        network: normalizeBitcoinNetwork(input.network ?? "testnet"),
+        from,
+        to: intent.merchantVault,
+        asset,
+        amount: asset.requiredAmount,
+        feeRate: input.feeRate === undefined ? undefined : normalizePositiveInteger(input.feeRate, "feeRate"),
+        changeAddress: optionalString(input.changeAddress, "changeAddress"),
+        payerPublicKey: optionalString(input.payerPublicKey, "payerPublicKey"),
+        utxos: normalizeRuneUtxos(input.runeUtxos),
+      }),
+    };
+  }
+  return {};
 }
 
 function buildTenderBalanceCheck(payerAddress: string, asset: VoucherAssetDescriptor, balance?: string): Erc20BalanceCheckRequest {
@@ -1749,6 +1778,39 @@ function buildTenderBalanceCheck(payerAddress: string, asset: VoucherAssetDescri
     asset,
     requiredAmount: asset.requiredAmount,
     balance,
+  });
+}
+
+function normalizeBitcoinNetwork(value: unknown): BitcoinNetwork {
+  if (
+    value === "mainnet" ||
+    value === "testnet" ||
+    value === "signet" ||
+    value === "regtest" ||
+    value === "fractal-mainnet" ||
+    value === "fractal-testnet"
+  ) {
+    return value;
+  }
+  throw new Error("network must be mainnet, testnet, signet, regtest, fractal-mainnet, or fractal-testnet");
+}
+
+function normalizeRuneUtxos(value: unknown): RuneUtxo[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("runeUtxos must contain at least one UTXO");
+  }
+  return value.map((item, index) => {
+    const utxo = recordOf(item);
+    return {
+      txid: requireString(utxo.txid, `runeUtxos[${index}].txid`),
+      vout: normalizeNonNegativeInteger(utxo.vout, `runeUtxos[${index}].vout`),
+      value: normalizePositiveInteger(utxo.value, `runeUtxos[${index}].value`),
+      address: requireString(utxo.address, `runeUtxos[${index}].address`),
+      runeId: requireString(utxo.runeId, `runeUtxos[${index}].runeId`),
+      amount: requireString(utxo.amount, `runeUtxos[${index}].amount`),
+      scriptPubKey: optionalString(utxo.scriptPubKey, `runeUtxos[${index}].scriptPubKey`),
+      raw: utxo.raw,
+    };
   });
 }
 

@@ -4,6 +4,28 @@
 
 No unreleased changes yet.
 
+## v0.4.0 - 2026-06-18
+
+### Added
+
+- Bitcoin Rune interface alpha in `@redeemloop/adapters`.
+- UniSat/Xverse-style `BitcoinRuneWalletAdapter` interfaces.
+- `RuneIndexerAdapter` and `MockRuneIndexerAdapter` for balance, UTXO, and transfer proof boundaries.
+- `buildRuneTransferPsbtRequest` for wallet-facing PSBT request fixtures.
+- API `transfer.bitcoin` response for Rune PaymentIntents through `POST /v1/payment-intents/:intentId/transfer-requested`.
+- SDK `BitcoinRunePsbtRequest` response type.
+- Bilingual Bitcoin Rune alpha boundary documentation.
+
+### 中文说明
+
+- `@redeemloop/adapters` 新增 Bitcoin Rune interface alpha。
+- 新增 UniSat/Xverse 风格的 `BitcoinRuneWalletAdapter` interfaces。
+- 新增 `RuneIndexerAdapter` 和 `MockRuneIndexerAdapter`，覆盖 balance、UTXO 和 transfer proof 边界。
+- 新增 `buildRuneTransferPsbtRequest`，用于面向钱包的 PSBT request fixture。
+- Rune PaymentIntent 可通过 `POST /v1/payment-intents/:intentId/transfer-requested` 返回 API `transfer.bitcoin`。
+- SDK 新增 `BitcoinRunePsbtRequest` 响应类型。
+- 新增双语 Bitcoin Rune alpha 边界文档。
+
 ## v0.3.0 - 2026-06-18
 
 ### Added

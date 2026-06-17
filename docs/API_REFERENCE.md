@@ -1,4 +1,4 @@
-# RedeemLoop API Reference v0.3.0
+# RedeemLoop API Reference v0.4.0
 
 ## English
 
@@ -46,6 +46,8 @@ POST /v1/payment-intents/:intentId/transfer-requested
 POST /v1/payment-intents/:intentId/broadcasted
 POST /v1/payment-intents/:intentId/cancel
 ```
+
+For Bitcoin Rune alpha assets, `transfer-requested` accepts `network`, `feeRate`, `changeAddress`, `payerPublicKey`, and `runeUtxos`, then returns `transfer.bitcoin.psbtBase64`.
 
 ### Settlement
 
@@ -123,6 +125,8 @@ POST /v1/payment-intents/:intentId/transfer-requested
 POST /v1/payment-intents/:intentId/broadcasted
 POST /v1/payment-intents/:intentId/cancel
 ```
+
+对于 Bitcoin Rune alpha 资产，`transfer-requested` 可接收 `network`、`feeRate`、`changeAddress`、`payerPublicKey` 和 `runeUtxos`，并返回 `transfer.bitcoin.psbtBase64`。
 
 ### Settlement
 

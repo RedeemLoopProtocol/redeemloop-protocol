@@ -122,6 +122,22 @@ export interface EvmTransferRequest {
   };
 }
 
+export interface BitcoinRunePsbtRequest {
+  chainNamespace: "bitcoin" | "fractal";
+  network: "mainnet" | "testnet" | "signet" | "regtest" | "fractal-mainnet" | "fractal-testnet";
+  assetType: "rune";
+  runeId: string;
+  from: string;
+  to: string;
+  amount: string;
+  feeRate: number;
+  psbtBase64: string;
+  inputs: Array<{ txid: string; vout: number; value: number; runeAmount: string }>;
+  outputs: Array<{ address: string; runeAmount?: string; role: "merchant" | "change" }>;
+  estimatedFee: string;
+  alpha: true;
+}
+
 export interface CheckBalanceResponse extends RedeemLoopPaymentIntent {
   balanceCheck: {
     chainNamespace: "eip155";
@@ -155,6 +171,7 @@ export interface TransferRequestResponse extends RedeemLoopPaymentIntent {
     amount: string;
     settlementPolicy: RedeemLoopPaymentIntent["settlementPolicy"];
     evm?: EvmTransferRequest;
+    bitcoin?: BitcoinRunePsbtRequest;
   };
 }
 

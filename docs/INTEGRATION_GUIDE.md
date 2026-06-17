@@ -1,4 +1,4 @@
-# RedeemLoop Integration Guide v0.3.0 / 集成指南 v0.3.0
+# RedeemLoop Integration Guide v0.4.0 / 集成指南 v0.4.0
 
 ## English
 
@@ -24,6 +24,7 @@ The merchant brings the voucher asset. RedeemLoop does not issue, mint, etch, in
 6. Receive mark-as-paid notifications after settlement confirmation.
 
 For a complete local sandbox, see [Public Merchant Sandbox](PUBLIC_SANDBOX.md). For endpoint-by-endpoint reference, see [API Reference](API_REFERENCE.md).
+For Bitcoin Rune interface alpha support, see [Bitcoin Rune Alpha](BITCOIN_RUNE_ALPHA.md).
 
 ### 3. SDK Flow
 
@@ -181,7 +182,7 @@ Authorization: Bearer dev-secret
 
 ### 9. WooCommerce and Shopify
 
-v0.3.0 includes the sandbox WooCommerce payment gateway plugin at:
+v0.4.0 includes the sandbox WooCommerce payment gateway plugin at:
 
 ```text
 plugins/woocommerce/redeemloop-voucher-gateway.php
@@ -267,6 +268,7 @@ Asset Binding -> PaymentIntent -> 提货券转账请求 -> 收券确认 -> 电�
 6. settlement 确认后接收 mark-as-paid 通知。
 
 完整本地 sandbox 请见 [Public Merchant Sandbox](PUBLIC_SANDBOX.md)。逐端点 API reference 请见 [API Reference](API_REFERENCE.md)。
+Bitcoin Rune interface alpha 请见 [Bitcoin Rune Alpha](BITCOIN_RUNE_ALPHA.md)。
 
 ### 3. SDK 流程
 
@@ -424,7 +426,7 @@ Authorization: Bearer dev-secret
 
 ### 9. WooCommerce 和 Shopify
 
-v0.3.0 已包含 WooCommerce sandbox payment gateway 插件：
+v0.4.0 已包含 WooCommerce sandbox payment gateway 插件：
 
 ```text
 plugins/woocommerce/redeemloop-voucher-gateway.php

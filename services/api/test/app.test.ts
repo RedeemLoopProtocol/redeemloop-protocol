@@ -870,6 +870,122 @@ describe("RedeemLoop API relayer prototype", () => {
     await app.close();
   });
 
+  it("creates a Bitcoin Rune PaymentIntent and returns an alpha PSBT request", async () => {
+    const app = await createApp({ chainId: 31337, dryRun: true });
+
+    await app.inject({
+      method: "POST",
+      url: "/v1/merchants",
+      payload: {
+        merchantId: "merchant_rune",
+        name: "Rune Merchant",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/entitlements",
+      payload: {
+        entitlementId: "ent_rune",
+        merchantId: "merchant_rune",
+        name: "Rune pickup",
+        quantity: 1,
+        termsHash: "rune-terms",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/bindings",
+      payload: {
+        bindingId: "bind_rune",
+        merchantId: "merchant_rune",
+        entitlementId: "ent_rune",
+        acceptedAssets: [
+          {
+            chainNamespace: "bitcoin",
+            assetType: "rune",
+            assetId: "bitcoin/rune:840000:3",
+            runeId: "840000:3",
+            requiredAmount: "10",
+            termsHash: "rune-terms",
+          },
+        ],
+        merchantVaults: {
+          bitcoin: "bc1merchant",
+        },
+        settlementPolicy: "collect",
+        commerceTargets: [
+          {
+            platform: "custom",
+            storeId: "rune-store",
+            sku: "rune-cup",
+          },
+        ],
+        status: "active",
+        termsHash: "rune-terms",
+      },
+    });
+    const intentResponse = await app.inject({
+      method: "POST",
+      url: "/v1/payment-intents",
+      payload: {
+        bindingId: "bind_rune",
+        orderId: "rune-42",
+        channel: "checkout",
+        payerAddress: "bc1payer",
+      },
+    });
+    expect(intentResponse.statusCode).toBe(201);
+    const intentId = intentResponse.json().intentId as string;
+
+    const transferResponse = await app.inject({
+      method: "POST",
+      url: `/v1/payment-intents/${intentId}/transfer-requested`,
+      payload: {
+        payerAddress: "bc1payer",
+        network: "testnet",
+        feeRate: 8,
+        changeAddress: "bc1change",
+        runeUtxos: [
+          {
+            txid: "tx_rune_1",
+            vout: 0,
+            value: 10_000,
+            address: "bc1payer",
+            runeId: "840000:3",
+            amount: "12",
+          },
+        ],
+      },
+    });
+    expect(transferResponse.statusCode).toBe(200);
+    expect(transferResponse.json()).toMatchObject({
+      status: "transfer_requested",
+      transfer: {
+        to: "bc1merchant",
+        amount: "10",
+        bitcoin: {
+          network: "testnet",
+          assetType: "rune",
+          runeId: "840000:3",
+          amount: "10",
+          alpha: true,
+          outputs: [
+            { address: "bc1merchant", runeAmount: "10", role: "merchant" },
+            { address: "bc1change", runeAmount: "2", role: "change" },
+          ],
+        },
+      },
+    });
+    const decoded = JSON.parse(Buffer.from(transferResponse.json().transfer.bitcoin.psbtBase64, "base64").toString("utf8"));
+    expect(decoded).toMatchObject({
+      kind: "redeemloop.rune-transfer-alpha",
+      network: "testnet",
+      runeId: "840000:3",
+    });
+
+    await app.close();
+  });
+
   it("creates an intent, verifies the EIP-712 signature, and dry-runs submission", async () => {
     const app = await createApp({ chainId: 31337, dryRun: true });
 
