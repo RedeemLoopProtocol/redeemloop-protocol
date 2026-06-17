@@ -4,6 +4,26 @@
 
 No unreleased changes yet.
 
+## v0.2.2 - 2026-06-18
+
+### Added
+
+- File-backed sandbox persistence through `REDEEMLOOP_STORAGE_FILE`.
+- Persistence coverage for merchants, merchant vaults, receiving addresses, commerce payments, entitlements, bindings, PaymentIntents, settlement proofs, proof idempotency, mark-as-paid idempotency, webhook endpoints, registered terminals, and legacy redemption submissions.
+- Merchant-scoped API key enforcement through `REDEEMLOOP_API_KEYS`.
+- API config response metadata for persistence and API-key auth status.
+- Tests proving PaymentIntent/proof/idempotency recovery across API restarts.
+- Tests proving missing or mismatched merchant API keys are rejected.
+
+### 中文说明
+
+- 通过 `REDEEMLOOP_STORAGE_FILE` 新增文件型 sandbox 持久化。
+- 持久化覆盖 merchant、merchant vault、收券地址、commerce payment、entitlement、binding、PaymentIntent、settlement proof、proof 幂等、mark-as-paid 幂等、webhook endpoint、registered terminal 和 legacy redemption submission。
+- 通过 `REDEEMLOOP_API_KEYS` 新增商户级 API key 校验。
+- API config 响应新增 persistence 和 API-key auth 状态。
+- 新增测试，证明 API 重启后可以恢复 PaymentIntent、proof 和幂等状态。
+- 新增测试，证明缺失或错误商户 API key 会被拒绝。
+
 ## v0.2.1 - 2026-06-18
 
 ### Added

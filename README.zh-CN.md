@@ -32,6 +32,7 @@ PaymentIntent
 - EVM ERC-20 钱包支付按钮所需的 transfer calldata。
 - EVM ERC-20 持券检测所需的 balanceOf call request。
 - Merchant Embed Alpha：SDK 方法、React Pay Button、script-tag widget 和 demo store 页面。
+- 文件持久化 sandbox 和商户级 API key 校验，适用于本地和 pilot 环境。
 - 商户收券地址 / vault 确认模型。
 - Settlement proof 提交与幂等。
 - WooCommerce、Shopify、自定义 mark-as-paid 适配表面。
@@ -95,6 +96,17 @@ pnpm verify
 pnpm api:dev
 ```
 
+可选 v0.2.2 sandbox 持久化和商户 API key：
+
+```bash
+REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json \
+REDEEMLOOP_API_KEYS="merchant_cafe:dev-secret" \
+pnpm api:dev
+```
+
+`REDEEMLOOP_STORAGE_FILE` 会把 merchant、vault、entitlement、binding、PaymentIntent、settlement proof、幂等 key、webhook endpoint 和 commerce payment record 持久化到本地文件，API 重启后仍可恢复。它是 sandbox persistence adapter，不是生产数据库替代品。
+`REDEEMLOOP_API_KEYS` 支持逗号分隔的 `merchantId:apiKey`，也支持 JSON object 字符串。配置后，商户级 `/v1` API 调用必须携带 `Authorization: Bearer <apiKey>`。
+
 运行本地 Phase 0 控制台：
 
 ```bash
@@ -113,7 +125,7 @@ pnpm pos:dev
 对于 EVM ERC-20 提货资产，`Request Transfer` 会返回钱包可直接使用的 `transfer(merchantVault, requiredAmount)` 交易请求，包括合约地址、calldata、chain ID 和 `value: 0x0`。
 `Check Balance` 会返回钱包可直接使用的 `balanceOf(payer)` call request；如果传入余额，也会判断付款地址是否持有足够提货资产。
 
-打开 `http://localhost:3000/demo-store` 可以查看 v0.2.1 商户嵌入 demo。该页面会先创建演示商户 binding，然后同时展示：
+打开 `http://localhost:3000/demo-store` 可以查看商户嵌入 demo。该页面会先创建演示商户 binding，然后同时展示：
 
 - `@redeemloop/react`：`RedeemLoopProvider` 和 `RedeemLoopPayButton`。
 - `@redeemloop/widget`：挂载到普通 DOM 节点的 script-tag 风格 widget。

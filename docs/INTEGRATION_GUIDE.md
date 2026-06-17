@@ -1,4 +1,4 @@
-# RedeemLoop Integration Guide v0.2.1 / 集成指南 v0.2.1
+# RedeemLoop Integration Guide v0.2.2 / 集成指南 v0.2.2
 
 ## English
 
@@ -147,9 +147,37 @@ REDEEMLOOP_EMBED_ALLOWED_ORIGINS="https://shop.example,https://checkout.example"
 
 Verified merchant domains are also accepted by the API CORS policy.
 
-### 8. WooCommerce and Shopify
+### 8. Sandbox Persistence and API Keys
 
-v0.2.1 provides the gateway surface, not production installable apps.
+For local or pilot environments, the API can persist sandbox state to a JSON file:
+
+```bash
+REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json pnpm api:dev
+```
+
+The file-backed adapter persists merchants, vaults, entitlements, bindings, PaymentIntents, settlement proofs, idempotency keys, webhook endpoints, and commerce payment records. It is useful for restarts and pilot demos, but production deployments should still move to a managed database.
+
+Merchant-scoped API key enforcement can be enabled with:
+
+```bash
+REDEEMLOOP_API_KEYS="merchant_cafe:dev-secret,merchant_shop:shop-secret"
+```
+
+or:
+
+```bash
+REDEEMLOOP_API_KEYS='{"merchant_cafe":"dev-secret"}'
+```
+
+When API keys are configured, merchant-scoped `/v1` requests must include:
+
+```http
+Authorization: Bearer dev-secret
+```
+
+### 9. WooCommerce and Shopify
+
+v0.2.2 provides the gateway surface, not production installable apps.
 
 WooCommerce should be implemented first as a native payment gateway plugin:
 
@@ -159,11 +187,10 @@ Checkout payment method -> RedeemLoop Pay Button/widget -> settlement confirmati
 
 Shopify should initially use product-page buttons or external/manual payment bridge patterns. Do not block the early protocol on a Shopify payment app review.
 
-### 9. Current Limits
+### 10. Current Limits
 
-- State is still in-memory.
+- Production database migrations are not included yet; v0.2.2 persistence is a file-backed sandbox adapter.
 - Settlement proof is still client-submitted.
-- API keys are accepted by the SDK but not enforced by the demo API yet.
 - Webhook endpoint testing exists, but reliable delivery queues arrive in a later release.
 
 ---
@@ -315,9 +342,37 @@ REDEEMLOOP_EMBED_ALLOWED_ORIGINS="https://shop.example,https://checkout.example"
 
 已验证的商户域名也会被 API CORS 策略放行。
 
-### 8. WooCommerce 和 Shopify
+### 8. Sandbox 持久化和 API Keys
 
-v0.2.1 提供支付网关表面，但还不是可安装生产应用。
+本地或 pilot 环境可以把 API 状态持久化到 JSON 文件：
+
+```bash
+REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json pnpm api:dev
+```
+
+文件持久化 adapter 会保存 merchant、vault、entitlement、binding、PaymentIntent、settlement proof、幂等 key、webhook endpoint 和 commerce payment record。它适合重启恢复和 pilot demo，但生产部署仍应迁移到托管数据库。
+
+商户级 API key 校验可以这样开启：
+
+```bash
+REDEEMLOOP_API_KEYS="merchant_cafe:dev-secret,merchant_shop:shop-secret"
+```
+
+或：
+
+```bash
+REDEEMLOOP_API_KEYS='{"merchant_cafe":"dev-secret"}'
+```
+
+配置 API key 后，商户级 `/v1` 请求必须携带：
+
+```http
+Authorization: Bearer dev-secret
+```
+
+### 9. WooCommerce 和 Shopify
+
+v0.2.2 提供支付网关表面，但还不是可安装生产应用。
 
 WooCommerce 应优先实现为原生 payment gateway 插件：
 
@@ -327,9 +382,8 @@ Checkout payment method -> RedeemLoop Pay Button/widget -> settlement confirmati
 
 Shopify 初期建议采用商品页按钮或 external/manual payment bridge 模式，不要让早期协议阻塞在 Shopify payment app 审核上。
 
-### 9. 当前限制
+### 10. 当前限制
 
-- 状态仍是内存存储。
+- 尚未提供生产数据库 migrations；v0.2.2 的持久化是文件型 sandbox adapter。
 - settlement proof 仍由客户端提交。
-- SDK 已支持 API key，但 demo API 尚未强制鉴权。
 - webhook endpoint test 已存在，可靠投递队列会在后续版本实现。

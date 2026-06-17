@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -328,6 +331,201 @@ describe("RedeemLoop API relayer prototype", () => {
       },
     });
     expect(merchantDomainResponse.headers["access-control-allow-origin"]).toBe("https://merchant.example");
+
+    await app.close();
+  });
+
+  it("persists v0.2 merchant, PaymentIntent, proof, and idempotency state across restarts", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "redeemloop-api-"));
+    const storageFile = join(directory, "state.json");
+
+    try {
+      const app = await createApp({
+        chainId: 31337,
+        dryRun: true,
+        storageFile,
+        woocommerceStoreUrl: "https://merchant.example",
+      });
+
+      await app.inject({
+        method: "POST",
+        url: "/v1/merchants",
+        payload: {
+          merchantId: "merchant_persist",
+          name: "Persistent Merchant",
+        },
+      });
+      await app.inject({
+        method: "POST",
+        url: "/v1/merchant-vaults",
+        payload: {
+          vaultId: "vault_persist",
+          merchantId: "merchant_persist",
+          chainNamespace: "eip155",
+          chainId: 31337,
+          address: operator,
+        },
+      });
+      await app.inject({
+        method: "POST",
+        url: "/v1/entitlements",
+        payload: {
+          entitlementId: "ent_persist",
+          merchantId: "merchant_persist",
+          name: "Persistent pickup",
+          quantity: 1,
+          termsHash: "persist-terms",
+        },
+      });
+      await app.inject({
+        method: "POST",
+        url: "/v1/bindings",
+        payload: {
+          bindingId: "bind_persist",
+          merchantId: "merchant_persist",
+          entitlementId: "ent_persist",
+          acceptedAssets: [
+            {
+              chainNamespace: "eip155",
+              chainId: 31337,
+              assetType: "erc20",
+              assetId: `eip155:31337/erc20:${token}`,
+              contract: token,
+              requiredAmount: "1",
+              termsHash: "persist-terms",
+            },
+          ],
+          merchantVaults: {
+            "eip155:31337": operator,
+          },
+          settlementPolicy: "collect",
+          commerceTargets: [
+            {
+              platform: "woocommerce",
+              storeId: "woo-store",
+              sku: "persist-cup",
+            },
+          ],
+          status: "active",
+          termsHash: "persist-terms",
+        },
+      });
+      const intentResponse = await app.inject({
+        method: "POST",
+        url: "/v1/payment-intents",
+        payload: {
+          bindingId: "bind_persist",
+          orderId: "persist-42",
+          channel: "checkout",
+          skuLines: [{ sku: "persist-cup", quantity: 1 }],
+          payerAddress: user.address,
+        },
+      });
+      const intentId = intentResponse.json().intentId as string;
+      const proofPayload = {
+        intentId,
+        txid: "0xpersist",
+        confirmations: 3,
+        from: user.address,
+        to: operator,
+        status: "confirmed",
+      };
+      const proofResponse = await app.inject({
+        method: "POST",
+        url: "/v1/settlement/proofs",
+        payload: proofPayload,
+      });
+      expect(proofResponse.statusCode).toBe(201);
+      await app.close();
+
+      const restored = await createApp({
+        chainId: 31337,
+        dryRun: true,
+        storageFile,
+        woocommerceStoreUrl: "https://merchant.example",
+      });
+      const restoredIntent = await restored.inject({
+        method: "GET",
+        url: `/v1/payment-intents/${intentId}`,
+      });
+      expect(restoredIntent.statusCode).toBe(200);
+      expect(restoredIntent.json()).toMatchObject({
+        intentId,
+        status: "paid",
+      });
+
+      const duplicateProofResponse = await restored.inject({
+        method: "POST",
+        url: "/v1/settlement/proofs",
+        payload: proofPayload,
+      });
+      expect(duplicateProofResponse.statusCode).toBe(200);
+      expect(duplicateProofResponse.json()).toMatchObject({
+        duplicate: true,
+      });
+
+      await restored.close();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("enforces merchant-scoped API keys when configured", async () => {
+    const app = await createApp({
+      chainId: 31337,
+      dryRun: true,
+      apiKeys: {
+        merchant_cafe: "secret",
+      },
+    });
+
+    const missingKeyResponse = await app.inject({
+      method: "POST",
+      url: "/v1/merchants",
+      payload: {
+        merchantId: "merchant_cafe",
+        name: "Merchant Cafe",
+      },
+    });
+    expect(missingKeyResponse.statusCode).toBe(401);
+
+    const wrongKeyResponse = await app.inject({
+      method: "POST",
+      url: "/v1/merchants",
+      headers: {
+        authorization: "Bearer wrong",
+      },
+      payload: {
+        merchantId: "merchant_cafe",
+        name: "Merchant Cafe",
+      },
+    });
+    expect(wrongKeyResponse.statusCode).toBe(403);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/merchants",
+      headers: {
+        authorization: "Bearer secret",
+      },
+      payload: {
+        merchantId: "merchant_cafe",
+        name: "Merchant Cafe",
+      },
+    });
+    expect(createResponse.statusCode).toBe(201);
+
+    const readResponse = await app.inject({
+      method: "GET",
+      url: "/v1/merchants/merchant_cafe",
+      headers: {
+        authorization: "Bearer secret",
+      },
+    });
+    expect(readResponse.statusCode).toBe(200);
+    expect(readResponse.json()).toMatchObject({
+      merchantId: "merchant_cafe",
+    });
 
     await app.close();
   });

@@ -32,6 +32,7 @@ This release fixes the first public implementation scope:
 - EVM ERC-20 transfer request calldata for wallet payment buttons.
 - EVM ERC-20 balance check request for wallet holding checks.
 - Merchant Embed Alpha with SDK methods, React Pay Button, script-tag widget, and demo store page.
+- File-backed sandbox persistence and merchant-scoped API key enforcement for local/pilot environments.
 - Merchant receiving address / vault confirmation model.
 - Settlement proof submission and idempotency.
 - WooCommerce, Shopify, and custom mark-as-paid adapter surface.
@@ -95,6 +96,17 @@ Run the API:
 pnpm api:dev
 ```
 
+Optional v0.2.2 sandbox persistence and merchant API keys:
+
+```bash
+REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json \
+REDEEMLOOP_API_KEYS="merchant_cafe:dev-secret" \
+pnpm api:dev
+```
+
+`REDEEMLOOP_STORAGE_FILE` persists merchants, vaults, entitlements, bindings, PaymentIntents, settlement proofs, idempotency keys, webhook endpoints, and commerce payment records across API restarts. It is a sandbox persistence adapter, not a production database replacement.
+`REDEEMLOOP_API_KEYS` accepts comma-separated `merchantId:apiKey` entries or a JSON object string. When configured, merchant-scoped `/v1` API calls must include `Authorization: Bearer <apiKey>`.
+
 Run the local Phase 0 console:
 
 ```bash
@@ -113,7 +125,7 @@ Open `http://localhost:3000`, keep the API at `http://localhost:8787`, then run:
 For EVM ERC-20 voucher assets, `Request Transfer` returns a wallet-ready `transfer(merchantVault, requiredAmount)` transaction request with contract address, calldata, chain ID, and `value: 0x0`.
 `Check Balance` returns a wallet-ready `balanceOf(payer)` call request and, when a balance is supplied, evaluates whether the payer holds enough voucher assets.
 
-Open `http://localhost:3000/demo-store` for the v0.2.1 merchant embed demo. The page seeds a demo merchant binding, then shows both:
+Open `http://localhost:3000/demo-store` for the merchant embed demo. The page seeds a demo merchant binding, then shows both:
 
 - `@redeemloop/react` with `RedeemLoopProvider` and `RedeemLoopPayButton`.
 - `@redeemloop/widget` mounted into a normal DOM node for script-tag style stores.
@@ -245,6 +257,7 @@ PaymentIntent
 - EVM ERC-20 钱包支付按钮所需的 transfer calldata。
 - EVM ERC-20 持券检测所需的 balanceOf call request。
 - Merchant Embed Alpha：SDK 方法、React Pay Button、script-tag widget 和 demo store 页面。
+- 文件持久化 sandbox 和商户级 API key 校验，适用于本地和 pilot 环境。
 - 商户收券地址 / vault 确认模型。
 - Settlement proof 提交与幂等。
 - WooCommerce、Shopify、自定义 mark-as-paid 适配表面。

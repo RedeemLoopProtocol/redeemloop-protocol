@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   buildErc20BalanceCheckRequest,
   buildErc20TransferRequest,
@@ -66,6 +66,7 @@ import {
   normalizeUintString,
   toContractAuthorization,
 } from "./typedData.js";
+import { createJsonFilePersistence, type RedeemLoopApiSnapshot } from "./persistence.js";
 
 interface ApiConfig {
   chainId: number;
@@ -73,6 +74,8 @@ interface ApiConfig {
   relayerPrivateKey?: Hex;
   dryRun: boolean;
   embedAllowedOrigins: string[];
+  storageFile?: string;
+  apiKeys: Record<string, string>;
   shopifyShopDomain?: string;
   shopifyAdminAccessToken?: string;
   shopifyApiVersion: string;
@@ -152,19 +155,20 @@ const voucherAbi = parseAbi([
 
 export async function createApp(config: Partial<ApiConfig> = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  const registeredTerminals = new Set<string>();
-  const redemptionSubmissions = new Set<string>();
-  const merchantReceivers = new Map<string, MerchantReceiverRecord>();
-  const commercePayments = new Map<string, CommercePaymentRecord>();
-  const merchants = new Map<string, MerchantRecord>();
-  const merchantVaults = new Map<string, MerchantVaultRecord>();
-  const entitlements = new Map<string, Entitlement>();
-  const bindings = new Map<string, RedemptionBinding>();
-  const paymentIntents = new Map<string, RedeemLoopPaymentIntent>();
-  const settlementProofs = new Map<string, VoucherPaymentProof>();
-  const proofIdempotency = new Map<string, string>();
-  const markPaidIdempotency = new Set<string>();
-  const webhookEndpoints = new Map<string, WebhookEndpointRecord>();
+  let schedulePersist = () => {};
+  const registeredTerminals = new PersistentSet<string>(() => schedulePersist());
+  const redemptionSubmissions = new PersistentSet<string>(() => schedulePersist());
+  const merchantReceivers = new PersistentMap<string, MerchantReceiverRecord>(() => schedulePersist());
+  const commercePayments = new PersistentMap<string, CommercePaymentRecord>(() => schedulePersist());
+  const merchants = new PersistentMap<string, MerchantRecord>(() => schedulePersist());
+  const merchantVaults = new PersistentMap<string, MerchantVaultRecord>(() => schedulePersist());
+  const entitlements = new PersistentMap<string, Entitlement>(() => schedulePersist());
+  const bindings = new PersistentMap<string, RedemptionBinding>(() => schedulePersist());
+  const paymentIntents = new PersistentMap<string, RedeemLoopPaymentIntent>(() => schedulePersist());
+  const settlementProofs = new PersistentMap<string, VoucherPaymentProof>(() => schedulePersist());
+  const proofIdempotency = new PersistentMap<string, string>(() => schedulePersist());
+  const markPaidIdempotency = new PersistentSet<string>(() => schedulePersist());
+  const webhookEndpoints = new PersistentMap<string, WebhookEndpointRecord>(() => schedulePersist());
   const resolvedConfig: ApiConfig = {
     chainId: normalizeChainId(config.chainId ?? process.env.CHAIN_ID ?? 31337),
     rpcUrl: config.rpcUrl ?? process.env.RPC_URL,
@@ -175,6 +179,8 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
         process.env.REDEEMLOOP_EMBED_ALLOWED_ORIGINS ??
         "http://localhost:3000,http://127.0.0.1:3000",
     ),
+    storageFile: config.storageFile ?? process.env.REDEEMLOOP_STORAGE_FILE,
+    apiKeys: parseMerchantApiKeys(config.apiKeys ?? process.env.REDEEMLOOP_API_KEYS),
     shopifyShopDomain: config.shopifyShopDomain ?? process.env.SHOPIFY_SHOP_DOMAIN,
     shopifyAdminAccessToken: config.shopifyAdminAccessToken ?? process.env.SHOPIFY_ADMIN_ACCESS_TOKEN,
     shopifyApiVersion: config.shopifyApiVersion ?? process.env.SHOPIFY_ADMIN_API_VERSION ?? "2026-04",
@@ -184,6 +190,75 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     woocommerceConsumerSecret: config.woocommerceConsumerSecret ?? process.env.WOOCOMMERCE_CONSUMER_SECRET,
     woocommerceWebhookSecret: config.woocommerceWebhookSecret ?? process.env.WOOCOMMERCE_WEBHOOK_SECRET,
   };
+  const persistence = createJsonFilePersistence(resolvedConfig.storageFile);
+  const snapshot = await persistence.load();
+  if (snapshot) {
+    hydrateApiSnapshot(snapshot, {
+      merchants,
+      merchantVaults,
+      merchantReceivers,
+      commercePayments,
+      entitlements,
+      bindings,
+      paymentIntents,
+      settlementProofs,
+      proofIdempotency,
+      markPaidIdempotency,
+      webhookEndpoints,
+      registeredTerminals,
+      redemptionSubmissions,
+    });
+  }
+  let persistQueue = Promise.resolve();
+  schedulePersist = () => {
+    if (!persistence.enabled) return;
+    persistQueue = persistQueue
+      .then(() =>
+        persistence.save(
+          createApiSnapshot({
+            merchants,
+            merchantVaults,
+            merchantReceivers,
+            commercePayments,
+            entitlements,
+            bindings,
+            paymentIntents,
+            settlementProofs,
+            proofIdempotency,
+            markPaidIdempotency,
+            webhookEndpoints,
+            registeredTerminals,
+            redemptionSubmissions,
+          }),
+        ),
+      )
+      .catch((error: unknown) => {
+        app.log.error(error);
+      });
+  };
+
+  app.addHook("onClose", async () => {
+    await persistQueue;
+    if (persistence.enabled) {
+      await persistence.save(
+        createApiSnapshot({
+          merchants,
+          merchantVaults,
+          merchantReceivers,
+          commercePayments,
+          entitlements,
+          bindings,
+          paymentIntents,
+          settlementProofs,
+          proofIdempotency,
+          markPaidIdempotency,
+          webhookEndpoints,
+          registeredTerminals,
+          redemptionSubmissions,
+        }),
+      );
+    }
+  });
 
   app.addContentTypeParser("application/json", { parseAs: "string" }, (_request, body, done) => {
     try {
@@ -204,6 +279,28 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     },
   });
 
+  app.addHook("preHandler", async (request, reply) => {
+    if (Object.keys(resolvedConfig.apiKeys).length === 0) return;
+    if (request.method === "OPTIONS") return;
+    if (!request.url.startsWith("/v1/")) return;
+    const merchantContext = resolveRequestMerchantId(request, {
+      merchants,
+      merchantVaults,
+      entitlements,
+      bindings,
+      paymentIntents,
+      settlementProofs,
+      webhookEndpoints,
+    });
+    if (!merchantContext.required) return;
+    if (!merchantContext.merchantId) {
+      return reply.code(400).send({ error: merchantContext.error ?? "merchantId is required when API keys are enabled" });
+    }
+    if (!hasMerchantApiAccess(request.headers.authorization, merchantContext.merchantId, resolvedConfig.apiKeys)) {
+      return reply.code(bearerToken(request.headers.authorization) ? 403 : 401).send({ error: "Invalid merchant API key" });
+    }
+  });
+
   app.get("/health", async () => ({
     ok: true,
     service: "redeemloop-api",
@@ -215,6 +312,12 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     chainId: resolvedConfig.chainId,
     dryRun: resolvedConfig.dryRun,
     embedAllowedOrigins: resolvedConfig.embedAllowedOrigins.includes("*") ? ["*"] : resolvedConfig.embedAllowedOrigins,
+    persistence: {
+      enabled: persistence.enabled,
+    },
+    auth: {
+      apiKeysEnabled: Object.keys(resolvedConfig.apiKeys).length > 0,
+    },
   }));
 
   app.post("/v1/merchants", async (request, reply) => {
@@ -976,6 +1079,208 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
   });
 
   return app;
+}
+
+class PersistentMap<K, V> extends Map<K, V> {
+  constructor(private readonly onChange: () => void) {
+    super();
+  }
+
+  override set(key: K, value: V): this {
+    super.set(key, value);
+    this.onChange();
+    return this;
+  }
+
+  override delete(key: K): boolean {
+    const deleted = super.delete(key);
+    if (deleted) this.onChange();
+    return deleted;
+  }
+
+  override clear(): void {
+    if (this.size === 0) return;
+    super.clear();
+    this.onChange();
+  }
+}
+
+class PersistentSet<T> extends Set<T> {
+  constructor(private readonly onChange: () => void) {
+    super();
+  }
+
+  override add(value: T): this {
+    super.add(value);
+    this.onChange();
+    return this;
+  }
+
+  override delete(value: T): boolean {
+    const deleted = super.delete(value);
+    if (deleted) this.onChange();
+    return deleted;
+  }
+
+  override clear(): void {
+    if (this.size === 0) return;
+    super.clear();
+    this.onChange();
+  }
+}
+
+interface SnapshotStores {
+  merchants: Map<string, MerchantRecord>;
+  merchantVaults: Map<string, MerchantVaultRecord>;
+  merchantReceivers: Map<string, MerchantReceiverRecord>;
+  commercePayments: Map<string, CommercePaymentRecord>;
+  entitlements: Map<string, Entitlement>;
+  bindings: Map<string, RedemptionBinding>;
+  paymentIntents: Map<string, RedeemLoopPaymentIntent>;
+  settlementProofs: Map<string, VoucherPaymentProof>;
+  proofIdempotency: Map<string, string>;
+  markPaidIdempotency: Set<string>;
+  webhookEndpoints: Map<string, WebhookEndpointRecord>;
+  registeredTerminals: Set<string>;
+  redemptionSubmissions: Set<string>;
+}
+
+function createApiSnapshot(stores: SnapshotStores): RedeemLoopApiSnapshot {
+  return {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    merchants: [...stores.merchants.values()],
+    merchantVaults: [...stores.merchantVaults.values()],
+    merchantReceivers: [...stores.merchantReceivers.values()],
+    commercePayments: [...stores.commercePayments.values()],
+    entitlements: [...stores.entitlements.values()],
+    bindings: [...stores.bindings.values()],
+    paymentIntents: [...stores.paymentIntents.values()],
+    settlementProofs: [...stores.settlementProofs.values()],
+    proofIdempotency: [...stores.proofIdempotency.entries()],
+    markPaidIdempotency: [...stores.markPaidIdempotency.values()],
+    webhookEndpoints: [...stores.webhookEndpoints.values()],
+    registeredTerminals: [...stores.registeredTerminals.values()],
+    redemptionSubmissions: [...stores.redemptionSubmissions.values()],
+  };
+}
+
+function hydrateApiSnapshot(snapshot: RedeemLoopApiSnapshot, stores: SnapshotStores): void {
+  for (const merchant of snapshot.merchants as MerchantRecord[]) stores.merchants.set(merchant.merchantId, merchant);
+  for (const vault of snapshot.merchantVaults as MerchantVaultRecord[]) stores.merchantVaults.set(vault.vaultId, vault);
+  for (const receiver of snapshot.merchantReceivers as MerchantReceiverRecord[]) {
+    stores.merchantReceivers.set(receiverKey(receiver.merchantId, receiver.chainId), receiver);
+  }
+  for (const payment of snapshot.commercePayments as CommercePaymentRecord[]) stores.commercePayments.set(payment.paymentId, payment);
+  for (const entitlement of snapshot.entitlements as Entitlement[]) stores.entitlements.set(entitlement.entitlementId, entitlement);
+  for (const binding of snapshot.bindings as RedemptionBinding[]) stores.bindings.set(binding.bindingId, binding);
+  for (const intent of snapshot.paymentIntents as RedeemLoopPaymentIntent[]) stores.paymentIntents.set(intent.intentId, intent);
+  for (const proof of snapshot.settlementProofs as VoucherPaymentProof[]) stores.settlementProofs.set(proof.proofId, proof);
+  for (const [key, proofId] of snapshot.proofIdempotency ?? []) stores.proofIdempotency.set(key, proofId);
+  for (const key of snapshot.markPaidIdempotency ?? []) stores.markPaidIdempotency.add(key);
+  for (const endpoint of snapshot.webhookEndpoints as WebhookEndpointRecord[]) stores.webhookEndpoints.set(endpoint.id, endpoint);
+  for (const key of snapshot.registeredTerminals ?? []) stores.registeredTerminals.add(key);
+  for (const key of snapshot.redemptionSubmissions ?? []) stores.redemptionSubmissions.add(key);
+}
+
+interface MerchantContextStores {
+  merchants: Map<string, MerchantRecord>;
+  merchantVaults: Map<string, MerchantVaultRecord>;
+  entitlements: Map<string, Entitlement>;
+  bindings: Map<string, RedemptionBinding>;
+  paymentIntents: Map<string, RedeemLoopPaymentIntent>;
+  settlementProofs: Map<string, VoucherPaymentProof>;
+  webhookEndpoints: Map<string, WebhookEndpointRecord>;
+}
+
+function resolveRequestMerchantId(
+  request: { method: string; url: string; body?: unknown; params?: unknown; query?: unknown },
+  stores: MerchantContextStores,
+): { required: boolean; merchantId?: string; error?: string } {
+  const body = recordOf(request.body);
+  const params = recordOf(request.params);
+  const query = recordOf(request.query);
+  const directMerchantId = stringOf(body.merchantId) ?? stringOf(params.merchantId) ?? stringOf(query.merchantId);
+  if (directMerchantId) return { required: true, merchantId: directMerchantId };
+
+  if (request.method === "POST" && request.url === "/v1/merchants") {
+    return { required: true, error: "merchantId is required when API keys are enabled" };
+  }
+
+  const vaultId = stringOf(params.vaultId);
+  if (vaultId) return { required: true, merchantId: stores.merchantVaults.get(vaultId)?.merchantId };
+
+  const entitlementId = stringOf(params.entitlementId);
+  if (entitlementId) return { required: true, merchantId: stores.entitlements.get(entitlementId)?.merchantId };
+
+  const bindingId = stringOf(body.bindingId) ?? stringOf(params.bindingId);
+  if (bindingId) return { required: true, merchantId: stores.bindings.get(bindingId)?.merchantId };
+
+  const intentId = stringOf(body.intentId) ?? stringOf(params.intentId);
+  if (intentId) return { required: true, merchantId: stores.paymentIntents.get(intentId)?.merchantId };
+
+  const proofId = stringOf(params.proofId);
+  if (proofId) {
+    const proof = stores.settlementProofs.get(proofId);
+    return { required: true, merchantId: proof ? stores.paymentIntents.get(proof.intentId)?.merchantId : undefined };
+  }
+
+  const webhookEndpointId = stringOf(params.id);
+  if (webhookEndpointId) return { required: true, merchantId: stores.webhookEndpoints.get(webhookEndpointId)?.merchantId };
+
+  if (request.url.startsWith("/v1/webhook-endpoints") || request.url.startsWith("/v1/merchant-vaults") || request.url.startsWith("/v1/bindings")) {
+    return { required: true, error: "merchantId is required when API keys are enabled" };
+  }
+
+  return { required: false };
+}
+
+function parseMerchantApiKeys(input: string | Record<string, string> | undefined): Record<string, string> {
+  if (!input) return {};
+  if (typeof input !== "string") return input;
+  const trimmed = input.trim();
+  if (!trimmed) return {};
+  if (trimmed.startsWith("{")) return JSON.parse(trimmed) as Record<string, string>;
+  return Object.fromEntries(
+    trimmed
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map((entry) => {
+        const separator = entry.indexOf(":");
+        if (separator <= 0) throw new Error("REDEEMLOOP_API_KEYS entries must use merchantId:apiKey");
+        return [entry.slice(0, separator), entry.slice(separator + 1)];
+      }),
+  );
+}
+
+function hasMerchantApiAccess(authorization: string | string[] | undefined, merchantId: string, apiKeys: Record<string, string>): boolean {
+  const token = bearerToken(authorization);
+  if (!token) return false;
+  const expected = apiKeys[merchantId];
+  if (!expected) return false;
+  return constantTimeEquals(token, expected);
+}
+
+function bearerToken(authorization: string | string[] | undefined): string | undefined {
+  const header = Array.isArray(authorization) ? authorization[0] : authorization;
+  if (!header?.startsWith("Bearer ")) return undefined;
+  return header.slice("Bearer ".length);
+}
+
+function constantTimeEquals(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function recordOf(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function stringOf(value: unknown): string | undefined {
+  return typeof value === "string" && value ? value : undefined;
 }
 
 function normalizeChainNamespace(value: unknown): "eip155" | "bitcoin" | "fractal" {
