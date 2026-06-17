@@ -2,8 +2,17 @@
 
 ## Unreleased
 
+No unreleased changes yet.
+
+## v0.2.1 - 2026-06-18
+
 ### Added
 
+- `@redeemloop/react` with `RedeemLoopProvider`, `RedeemLoopPayButton`, and a tested merchant payment flow helper.
+- `@redeemloop/widget` with script-tag style DOM mounting through `data-redeemloop-pay-button`.
+- Expanded `@redeemloop/sdk` coverage for merchants, vaults, entitlements, bindings, PaymentIntent wallet/connect/select/check/transfer/broadcast/cancel, settlement recheck, receiving addresses, and webhook endpoints.
+- Demo store page at `/demo-store` showing React and script widget merchant embeds.
+- Configurable API embed CORS allowlist through `REDEEMLOOP_EMBED_ALLOWED_ORIGINS`, with localhost defaults for local development and verified merchant domains as dynamic allowed origins.
 - Concrete EVM ERC-20 transfer request builder in `@redeemloop/adapters`.
 - EVM ERC-20 balance check request builder and PaymentIntent check-balance API.
 - `transfer.evm.transaction` response on `POST /v1/payment-intents/:intentId/transfer-requested` for wallet-ready ERC-20 `transfer(merchantVault, requiredAmount)` calls.
@@ -11,6 +20,11 @@
 
 ### 中文说明
 
+- 新增 `@redeemloop/react`：包含 `RedeemLoopProvider`、`RedeemLoopPayButton` 和已测试的商户支付流程 helper。
+- 新增 `@redeemloop/widget`：支持通过 `data-redeemloop-pay-button` 挂载 script-tag 风格 DOM widget。
+- 扩展 `@redeemloop/sdk`：覆盖 merchant、vault、entitlement、binding、PaymentIntent 钱包连接/选资产/查余额/请求转账/广播/取消、settlement recheck、收券地址和 webhook endpoint。
+- 新增 `/demo-store` 页面，同时展示 React 嵌入和 script widget 嵌入。
+- API 新增可配置嵌入来源 allowlist：`REDEEMLOOP_EMBED_ALLOWED_ORIGINS`，本地默认允许 localhost，并支持已验证商户域名动态放行。
 - 在 `@redeemloop/adapters` 中新增具体 EVM ERC-20 transfer request builder。
 - 新增 EVM ERC-20 balance check request builder 和 PaymentIntent check-balance API。
 - `POST /v1/payment-intents/:intentId/transfer-requested` 现在返回 `transfer.evm.transaction`，可直接用于钱包发起 ERC-20 `transfer(merchantVault, requiredAmount)`。

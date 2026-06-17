@@ -1,0 +1,212 @@
+import { describe, expect, it, vi } from "vitest";
+import type { RedeemLoopClient } from "@redeemloop/sdk";
+
+import { runRedeemLoopPayFlow } from "../src/flow.js";
+
+describe("runRedeemLoopPayFlow", () => {
+  it("creates an intent, checks balance, requests transfer, and submits optional proof", async () => {
+    const client = {
+      createPaymentIntent: vi.fn(async () => ({
+        intentId: "pi_test",
+        bindingId: "bind_test",
+        merchantId: "merchant_test",
+        orderId: "order_1",
+        channel: "checkout",
+        skuLines: [{ sku: "sku_1", quantity: 1 }],
+        acceptedAssets: [
+          {
+            chainNamespace: "eip155",
+            chainId: 31337,
+            assetType: "erc20",
+            assetId: "asset_1",
+            contract: "0x0000000000000000000000000000000000000def",
+            requiredAmount: "1",
+            termsHash: "terms",
+          },
+        ],
+        merchantVault: "0x0000000000000000000000000000000000000abc",
+        settlementPolicy: "collect",
+        status: "created",
+        expiresAt: "2026-06-18T00:00:00.000Z",
+        createdAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+      })),
+      checkBalance: vi.fn(async () => ({
+        intentId: "pi_test",
+        bindingId: "bind_test",
+        merchantId: "merchant_test",
+        orderId: "order_1",
+        channel: "checkout",
+        skuLines: [{ sku: "sku_1", quantity: 1 }],
+        acceptedAssets: [
+          {
+            chainNamespace: "eip155",
+            chainId: 31337,
+            assetType: "erc20",
+            assetId: "asset_1",
+            contract: "0x0000000000000000000000000000000000000def",
+            requiredAmount: "1",
+            termsHash: "terms",
+          },
+        ],
+        merchantVault: "0x0000000000000000000000000000000000000abc",
+        settlementPolicy: "collect",
+        status: "asset_selected",
+        expiresAt: "2026-06-18T00:00:00.000Z",
+        createdAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+        balanceCheck: {
+          chainNamespace: "eip155",
+          chainId: 31337,
+          assetType: "erc20",
+          account: "0x0000000000000000000000000000000000000123",
+          contract: "0x0000000000000000000000000000000000000def",
+          requiredAmount: "1",
+          call: {
+            chainId: 31337,
+            to: "0x0000000000000000000000000000000000000def",
+            data: "0x70a08231",
+            functionName: "balanceOf",
+            args: ["0x0000000000000000000000000000000000000123"],
+          },
+          providedBalance: "1",
+          hasSufficientBalance: true,
+          shortfall: "0",
+        },
+      })),
+      requestTransfer: vi.fn(async () => ({
+        intentId: "pi_test",
+        bindingId: "bind_test",
+        merchantId: "merchant_test",
+        orderId: "order_1",
+        channel: "checkout",
+        skuLines: [{ sku: "sku_1", quantity: 1 }],
+        acceptedAssets: [
+          {
+            chainNamespace: "eip155",
+            chainId: 31337,
+            assetType: "erc20",
+            assetId: "asset_1",
+            contract: "0x0000000000000000000000000000000000000def",
+            requiredAmount: "1",
+            termsHash: "terms",
+          },
+        ],
+        selectedAsset: {
+          chainNamespace: "eip155",
+          chainId: 31337,
+          assetType: "erc20",
+          assetId: "asset_1",
+          contract: "0x0000000000000000000000000000000000000def",
+          requiredAmount: "1",
+          termsHash: "terms",
+        },
+        merchantVault: "0x0000000000000000000000000000000000000abc",
+        settlementPolicy: "collect",
+        status: "transfer_requested",
+        expiresAt: "2026-06-18T00:00:00.000Z",
+        createdAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+        transfer: {
+          to: "0x0000000000000000000000000000000000000abc",
+          asset: {
+            chainNamespace: "eip155",
+            chainId: 31337,
+            assetType: "erc20",
+            assetId: "asset_1",
+            contract: "0x0000000000000000000000000000000000000def",
+            requiredAmount: "1",
+            termsHash: "terms",
+          },
+          amount: "1",
+          settlementPolicy: "collect",
+        },
+      })),
+      markBroadcasted: vi.fn(async () => ({
+        intentId: "pi_test",
+        bindingId: "bind_test",
+        merchantId: "merchant_test",
+        orderId: "order_1",
+        channel: "checkout",
+        skuLines: [{ sku: "sku_1", quantity: 1 }],
+        acceptedAssets: [
+          {
+            chainNamespace: "eip155",
+            chainId: 31337,
+            assetType: "erc20",
+            assetId: "asset_1",
+            contract: "0x0000000000000000000000000000000000000def",
+            requiredAmount: "1",
+            termsHash: "terms",
+          },
+        ],
+        selectedAsset: {
+          chainNamespace: "eip155",
+          chainId: 31337,
+          assetType: "erc20",
+          assetId: "asset_1",
+          contract: "0x0000000000000000000000000000000000000def",
+          requiredAmount: "1",
+          termsHash: "terms",
+        },
+        merchantVault: "0x0000000000000000000000000000000000000abc",
+        settlementPolicy: "collect",
+        status: "broadcasted",
+        expiresAt: "2026-06-18T00:00:00.000Z",
+        createdAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+        txid: "0x1234",
+      })),
+      submitSettlementProof: vi.fn(async () => ({
+        proofId: "proof_test",
+        intentId: "pi_test",
+        chainNamespace: "eip155",
+        chainId: 31337,
+        txid: "0x1234",
+        confirmations: 1,
+        from: "0x0000000000000000000000000000000000000123",
+        to: "0x0000000000000000000000000000000000000abc",
+        assetType: "erc20",
+        assetId: "asset_1",
+        amount: "1",
+        status: "confirmed",
+        paymentIntent: {
+          intentId: "pi_test",
+          bindingId: "bind_test",
+          merchantId: "merchant_test",
+          orderId: "order_1",
+          channel: "checkout",
+          skuLines: [{ sku: "sku_1", quantity: 1 }],
+          acceptedAssets: [],
+          merchantVault: "0x0000000000000000000000000000000000000abc",
+          settlementPolicy: "collect",
+          status: "paid",
+          expiresAt: "2026-06-18T00:00:00.000Z",
+          createdAt: "2026-06-18T00:00:00.000Z",
+          updatedAt: "2026-06-18T00:00:00.000Z",
+        },
+      })),
+    } as unknown as RedeemLoopClient;
+
+    const steps: string[] = [];
+    const result = await runRedeemLoopPayFlow(
+      client,
+      {
+        bindingId: "bind_test",
+        orderId: "order_1",
+        channel: "checkout",
+        skuLines: [{ sku: "sku_1", quantity: 1 }],
+        payerAddress: "0x0000000000000000000000000000000000000123",
+        balance: "1",
+        txid: "0x1234",
+        autoSubmitProof: true,
+      },
+      { onStep: (step) => steps.push(step) },
+    );
+
+    expect(result.intent.status).toBe("paid");
+    expect(result.transfer?.amount).toBe("1");
+    expect(result.proof?.status).toBe("confirmed");
+    expect(steps).toEqual(["creating_intent", "checking_balance", "requesting_transfer", "broadcasting", "submitting_proof", "complete"]);
+  });
+});

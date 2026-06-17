@@ -1,5 +1,5 @@
 {
-  "name": "@redeemloop/sdk",
+  "name": "@redeemloop/widget",
   "private": true,
   "version": "0.2.1",
   "type": "module",
@@ -18,7 +18,7 @@
     "lint": "tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
-    "@redeemloop/core": "workspace:*"
+    "@redeemloop/sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",

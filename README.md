@@ -31,6 +31,7 @@ This release fixes the first public implementation scope:
 - PaymentIntent state machine and API.
 - EVM ERC-20 transfer request calldata for wallet payment buttons.
 - EVM ERC-20 balance check request for wallet holding checks.
+- Merchant Embed Alpha with SDK methods, React Pay Button, script-tag widget, and demo store page.
 - Merchant receiving address / vault confirmation model.
 - Settlement proof submission and idempotency.
 - WooCommerce, Shopify, and custom mark-as-paid adapter surface.
@@ -64,9 +65,11 @@ RedeemLoop does not:
 packages/core      Protocol types, validators, PaymentIntent state machine
 packages/adapters  EVM, PSBT, wallet, and indexer adapter interfaces
 packages/sdk       TypeScript API client
+packages/react     React provider and Pay Button for merchant embeds
+packages/widget    Script-tag widget for non-React merchant stores
 packages/contracts EVM ERC-20 voucher example contracts only
 services/api       Fastify API for bindings, intents, proofs, webhooks, commerce adapters
-apps/pos-verifier  Local Phase 0 console and POS-style QR demo
+apps/pos-verifier  Local Phase 0 console, POS-style QR demo, and demo store page
 docs/              v0.2 protocol, boundary, API, integration, and construction docs
 whitepaper/        v0.2 whitepaper source and rendered files
 ```
@@ -110,6 +113,47 @@ Open `http://localhost:3000`, keep the API at `http://localhost:8787`, then run:
 For EVM ERC-20 voucher assets, `Request Transfer` returns a wallet-ready `transfer(merchantVault, requiredAmount)` transaction request with contract address, calldata, chain ID, and `value: 0x0`.
 `Check Balance` returns a wallet-ready `balanceOf(payer)` call request and, when a balance is supplied, evaluates whether the payer holds enough voucher assets.
 
+Open `http://localhost:3000/demo-store` for the v0.2.1 merchant embed demo. The page seeds a demo merchant binding, then shows both:
+
+- `@redeemloop/react` with `RedeemLoopProvider` and `RedeemLoopPayButton`.
+- `@redeemloop/widget` mounted into a normal DOM node for script-tag style stores.
+
+React embed example:
+
+```tsx
+import { RedeemLoopPayButton, RedeemLoopProvider } from "@redeemloop/react";
+
+export function ProductCheckout() {
+  return (
+    <RedeemLoopProvider baseUrl="https://api.example.com">
+      <RedeemLoopPayButton
+        bindingId="bind_merchant_cafe_coffee_cup"
+        orderId="ORDER-1001"
+        channel="checkout"
+        skuLines={[{ sku: "coffee-cup", quantity: 1 }]}
+        payerAddress="0xPayer"
+        balance="1"
+      />
+    </RedeemLoopProvider>
+  );
+}
+```
+
+Script widget example:
+
+```html
+<div
+  data-redeemloop-pay-button
+  data-api-base-url="https://api.example.com"
+  data-binding-id="bind_merchant_cafe_coffee_cup"
+  data-order-id="ORDER-1001"
+  data-sku="coffee-cup"
+  data-payer-address="0xPayer"
+  data-balance="1"
+></div>
+<script type="module" src="/redeemloop-widget.js"></script>
+```
+
 ## API Surface
 
 Core v0.2 endpoints:
@@ -125,8 +169,11 @@ POST /v1/bindings
 GET  /v1/bindings/:bindingId
 POST /v1/payment-intents
 GET  /v1/payment-intents/:intentId
+POST /v1/payment-intents/:intentId/connect-wallet
+POST /v1/payment-intents/:intentId/select-asset
 POST /v1/payment-intents/:intentId/check-balance
 POST /v1/payment-intents/:intentId/transfer-requested
+POST /v1/payment-intents/:intentId/broadcasted
 POST /v1/settlement/proofs
 POST /v1/webhook-endpoints
 POST /v1/webhook-endpoints/:id/test
@@ -197,6 +244,7 @@ PaymentIntent
 - PaymentIntent 状态机与 API。
 - EVM ERC-20 钱包支付按钮所需的 transfer calldata。
 - EVM ERC-20 持券检测所需的 balanceOf call request。
+- Merchant Embed Alpha：SDK 方法、React Pay Button、script-tag widget 和 demo store 页面。
 - 商户收券地址 / vault 确认模型。
 - Settlement proof 提交与幂等。
 - WooCommerce、Shopify、自定义 mark-as-paid 适配表面。
@@ -230,9 +278,11 @@ RedeemLoop 不做：
 packages/core      协议类型、校验器、PaymentIntent 状态机
 packages/adapters  EVM、PSBT、钱包、索引器 adapter interfaces
 packages/sdk       TypeScript API client
+packages/react     面向商户嵌入的 React provider 和 Pay Button
+packages/widget    面向非 React 店铺的 script-tag widget
 packages/contracts EVM ERC-20 提货资产示例合约
 services/api       binding、intent、proof、webhook、电商适配 API
-apps/pos-verifier  本地 Phase 0 控制台和 POS QR 演示
+apps/pos-verifier  本地 Phase 0 控制台、POS QR 演示和 demo store 页面
 docs/              v0.2 协议、边界、API、集成和施工文档
 whitepaper/        v0.2 白皮书源码和渲染文件
 ```

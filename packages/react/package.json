@@ -1,5 +1,5 @@
 {
-  "name": "@redeemloop/sdk",
+  "name": "@redeemloop/react",
   "private": true,
   "version": "0.2.1",
   "type": "module",
@@ -18,10 +18,16 @@
     "lint": "tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
-    "@redeemloop/core": "workspace:*"
+    "@redeemloop/core": "workspace:*",
+    "@redeemloop/sdk": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "react": "^19.0.0",
     "typescript": "^5.7.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.9"

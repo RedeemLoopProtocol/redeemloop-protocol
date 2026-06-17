@@ -280,6 +280,58 @@ describe("RedeemLoop API relayer prototype", () => {
     await app.close();
   });
 
+  it("enforces configured and merchant-verified embed origins", async () => {
+    const app = await createApp({
+      chainId: 31337,
+      dryRun: true,
+      embedAllowedOrigins: ["https://allowed.example"],
+    });
+
+    const allowedResponse = await app.inject({
+      method: "GET",
+      url: "/health",
+      headers: {
+        origin: "https://allowed.example",
+      },
+    });
+    expect(allowedResponse.headers["access-control-allow-origin"]).toBe("https://allowed.example");
+
+    const deniedResponse = await app.inject({
+      method: "GET",
+      url: "/health",
+      headers: {
+        origin: "https://denied.example",
+      },
+    });
+    expect(deniedResponse.headers["access-control-allow-origin"]).toBeUndefined();
+
+    await app.inject({
+      method: "POST",
+      url: "/v1/merchants",
+      payload: {
+        merchantId: "merchant_cafe",
+        name: "Merchant Cafe",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/merchants/merchant_cafe/domains/verify",
+      payload: {
+        domain: "merchant.example",
+      },
+    });
+    const merchantDomainResponse = await app.inject({
+      method: "GET",
+      url: "/health",
+      headers: {
+        origin: "https://merchant.example",
+      },
+    });
+    expect(merchantDomainResponse.headers["access-control-allow-origin"]).toBe("https://merchant.example");
+
+    await app.close();
+  });
+
   it("creates an intent, verifies the EIP-712 signature, and dry-runs submission", async () => {
     const app = await createApp({ chainId: 31337, dryRun: true });
 

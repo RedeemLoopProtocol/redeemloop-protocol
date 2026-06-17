@@ -1,7 +1,7 @@
 {
   "name": "@redeemloop/pos-verifier",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.7",
+    "@redeemloop/react": "workspace:*",
+    "@redeemloop/sdk": "workspace:*",
+    "@redeemloop/widget": "workspace:*",
     "next": "^16.2.9",
     "qrcode.react": "^4.2.0",
     "react": "^19.0.0",

@@ -1,7 +1,7 @@
 {
   "name": "redeemloop-protocol",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
   "packageManager": "pnpm@10.32.1",
   "engines": {
@@ -10,9 +10,9 @@
   },
   "scripts": {
     "dev": "pnpm -r --parallel dev",
-    "build": "pnpm contracts:build && pnpm --filter @redeemloop/core build && pnpm --filter @redeemloop/adapters build && pnpm --filter @redeemloop/sdk build && pnpm --filter @redeemloop/api build && pnpm --filter @redeemloop/pos-verifier build",
-    "test": "pnpm contracts:test && pnpm --filter @redeemloop/core test && pnpm --filter @redeemloop/adapters test && pnpm --filter @redeemloop/sdk test && pnpm --filter @redeemloop/api test && pnpm --filter @redeemloop/pos-verifier test",
-    "lint": "pnpm --filter @redeemloop/example-evm-erc20-voucher lint && pnpm --filter @redeemloop/core lint && pnpm --filter @redeemloop/adapters lint && pnpm --filter @redeemloop/sdk lint && pnpm --filter @redeemloop/api lint && pnpm --filter @redeemloop/pos-verifier lint",
+    "build": "pnpm contracts:build && pnpm --filter @redeemloop/core build && pnpm --filter @redeemloop/adapters build && pnpm --filter @redeemloop/sdk build && pnpm --filter @redeemloop/react build && pnpm --filter @redeemloop/widget build && pnpm --filter @redeemloop/api build && pnpm --filter @redeemloop/pos-verifier build",
+    "test": "pnpm contracts:test && pnpm --filter @redeemloop/core test && pnpm --filter @redeemloop/adapters test && pnpm --filter @redeemloop/sdk test && pnpm --filter @redeemloop/react test && pnpm --filter @redeemloop/widget test && pnpm --filter @redeemloop/api test && pnpm --filter @redeemloop/pos-verifier test",
+    "lint": "pnpm --filter @redeemloop/core lint && pnpm --filter @redeemloop/adapters lint && pnpm --filter @redeemloop/sdk lint && pnpm --filter @redeemloop/react lint && pnpm --filter @redeemloop/widget lint && pnpm --filter @redeemloop/api lint && pnpm --filter @redeemloop/pos-verifier lint",
     "verify": "pnpm lint && pnpm test && pnpm build",
     "contracts:build": "cd packages/contracts && forge build",
     "contracts:test": "cd packages/contracts && forge test",

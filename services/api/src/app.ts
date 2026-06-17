@@ -72,6 +72,7 @@ interface ApiConfig {
   rpcUrl?: string;
   relayerPrivateKey?: Hex;
   dryRun: boolean;
+  embedAllowedOrigins: string[];
   shopifyShopDomain?: string;
   shopifyAdminAccessToken?: string;
   shopifyApiVersion: string;
@@ -169,6 +170,11 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     rpcUrl: config.rpcUrl ?? process.env.RPC_URL,
     relayerPrivateKey: config.relayerPrivateKey ?? (process.env.RELAYER_PRIVATE_KEY as Hex | undefined),
     dryRun: config.dryRun ?? process.env.RELAYER_DRY_RUN !== "false",
+    embedAllowedOrigins: parseAllowedOrigins(
+      config.embedAllowedOrigins ??
+        process.env.REDEEMLOOP_EMBED_ALLOWED_ORIGINS ??
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ),
     shopifyShopDomain: config.shopifyShopDomain ?? process.env.SHOPIFY_SHOP_DOMAIN,
     shopifyAdminAccessToken: config.shopifyAdminAccessToken ?? process.env.SHOPIFY_ADMIN_ACCESS_TOKEN,
     shopifyApiVersion: config.shopifyApiVersion ?? process.env.SHOPIFY_ADMIN_API_VERSION ?? "2026-04",
@@ -192,7 +198,11 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     }
   });
 
-  await app.register(cors, { origin: true });
+  await app.register(cors, {
+    origin: (origin, callback) => {
+      callback(null, isAllowedEmbedOrigin(origin, resolvedConfig, merchants));
+    },
+  });
 
   app.get("/health", async () => ({
     ok: true,
@@ -204,6 +214,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
   app.get("/v1/config", async () => ({
     chainId: resolvedConfig.chainId,
     dryRun: resolvedConfig.dryRun,
+    embedAllowedOrigins: resolvedConfig.embedAllowedOrigins.includes("*") ? ["*"] : resolvedConfig.embedAllowedOrigins,
   }));
 
   app.post("/v1/merchants", async (request, reply) => {
@@ -1246,6 +1257,41 @@ function redactWebhookSecret(endpoint: WebhookEndpointRecord) {
     ...endpoint,
     secret: "<redacted>",
   };
+}
+
+function parseAllowedOrigins(input: string | string[] | undefined): string[] {
+  const values = Array.isArray(input) ? input : String(input ?? "").split(",");
+  return values.map((value) => value.trim()).filter(Boolean);
+}
+
+function isAllowedEmbedOrigin(origin: string | undefined, config: ApiConfig, merchants: Map<string, MerchantRecord>): boolean {
+  if (!origin) return true;
+  if (config.embedAllowedOrigins.includes("*")) return true;
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) return false;
+  if (config.embedAllowedOrigins.some((allowed) => normalizeOrigin(allowed) === normalizedOrigin)) return true;
+  const originHost = normalizedHost(origin);
+  if (!originHost) return false;
+  return [...merchants.values()].some((merchant) =>
+    merchant.domains.some((domain) => domain.verified && normalizedHost(domain.domain) === originHost),
+  );
+}
+
+function normalizeOrigin(value: string): string | undefined {
+  try {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}`.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizedHost(value: string): string | undefined {
+  try {
+    return new URL(value.includes("://") ? value : `https://${value}`).host.toLowerCase();
+  } catch {
+    return undefined;
+  }
 }
 
 function randomId(prefix: string): string {

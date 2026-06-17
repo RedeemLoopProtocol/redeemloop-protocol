@@ -1,198 +1,335 @@
-# RedeemLoop 集成指南 v0.2
+# RedeemLoop Integration Guide v0.2.1 / 集成指南 v0.2.1
 
-## 1. 集成思路
+## English
 
-RedeemLoop 不是让电商平台支持 token 原生定价，而是让电商平台多一个外部支付方式：
+### 1. Integration Model
 
-```text
-RedeemLoop Voucher
-```
+RedeemLoop is an external voucher payment gateway. The commerce system still owns product pricing, orders, fulfillment, tax, refunds, and customer support.
 
-商品价格、订单、物流、售后继续由原平台处理。RedeemLoop 只在链上收券确认后通知平台：
+RedeemLoop owns only this path:
 
 ```text
-这笔订单已使用提货券支付成功。
+Asset Binding -> PaymentIntent -> voucher transfer request -> receipt confirmation -> commerce mark-as-paid
 ```
 
-## 2. 厂商接入流程
+The merchant brings the voucher asset. RedeemLoop does not issue, mint, etch, inscribe, custody, price, or trade that asset.
 
-1. 厂商自己发行或准备链上提货资产。
-2. 在 RedeemLoop Console 创建 Asset Binding。
-3. 填入资产描述符。
-4. 填入商品权益条款。
-5. 选择商品 SKU 或权益组。
-6. 配置商户收券地址。
-7. 验证收券地址控制权。
-8. 配置 webhook。
-9. 安装商品页按钮、结账页支付方式或 POS QR。
+### 2. Merchant Setup
 
-## 3. 商品页按钮
+1. Create a merchant.
+2. Create a merchant vault / receiving address.
+3. Create an entitlement for the good or service.
+4. Create an Asset Binding that connects accepted voucher assets, entitlement, SKU, store target, settlement policy, and merchant vault.
+5. Embed the React Pay Button or script widget.
+6. Receive mark-as-paid notifications after settlement confirmation.
 
-```html
-<script src="https://cdn.redeemloop.org/pay/v0/redeemloop-pay.js"></script>
-<div
-  data-rl-pay-button
-  data-binding-id="rlb_coke_global_001"
-  data-platform="custom"
-  data-store-id="store_001"
-  data-product-id="prod_001"
-  data-sku="COKE-330ML-JP">
-</div>
+### 3. SDK Flow
+
+```ts
+import { RedeemLoopClient } from "@redeemloop/sdk";
+
+const client = new RedeemLoopClient("https://api.example.com", "merchant-api-key");
+
+await client.createMerchant({ merchantId: "merchant_cafe", name: "Merchant Cafe" });
+await client.createMerchantVault({
+  merchantId: "merchant_cafe",
+  chainNamespace: "eip155",
+  chainId: 8453,
+  address: "0xMerchantVault",
+});
+
+await client.createEntitlement({
+  merchantId: "merchant_cafe",
+  entitlementId: "ent_coffee",
+  name: "Coffee pickup",
+  quantity: 1,
+  termsHash: "coffee-terms",
+});
+
+await client.createBinding({
+  bindingId: "bind_coffee",
+  merchantId: "merchant_cafe",
+  entitlementId: "ent_coffee",
+  acceptedAssets: [
+    {
+      chainNamespace: "eip155",
+      chainId: 8453,
+      assetType: "erc20",
+      assetId: "eip155:8453/erc20:0xVoucherToken",
+      contract: "0xVoucherToken",
+      requiredAmount: "1",
+      termsHash: "coffee-terms",
+    },
+  ],
+  merchantVaults: {
+    "eip155:8453": "0xMerchantVault",
+  },
+  settlementPolicy: "collect",
+  commerceTargets: [{ platform: "woocommerce", storeId: "woo-store", sku: "coffee-cup" }],
+  status: "active",
+  termsHash: "coffee-terms",
+});
 ```
 
-按钮行为：
-
-```text
-查询 binding
-展示支持的钱包与资产
-连接钱包
-检测持券
-创建 pending order
-创建 PaymentIntent
-引导转券
-等待确认
-跳转成功页
-```
-
-对 EVM ERC-20 资产，前端调用：
-
-```http
-POST /v1/payment-intents/:intentId/check-balance
-POST /v1/payment-intents/:intentId/transfer-requested
-```
-
-`check-balance` 返回 `balanceOf(payer)` call request。前端可以用钱包/RPC 读取余额，也可以把已读取的余额传给 API，由 API 判断是否满足 `requiredAmount`。
-
-响应中的 `transfer.evm.transaction` 可以直接传给 EVM 钱包：
-
-```json
-{
-  "to": "0xVoucherToken",
-  "data": "0xa9059cbb...",
-  "value": "0x0",
-  "chainId": 8453
-}
-```
-
-这笔交易调用的是已有 ERC-20 合约的 `transfer(merchantVault, requiredAmount)`，RedeemLoop 不部署资产合约，也不托管用户资产。
-
-## 4. React 集成
+### 4. React Pay Button
 
 ```tsx
-import { RedeemLoopProvider, RedeemLoopPayButton } from '@redeemloop/react';
+import { RedeemLoopPayButton, RedeemLoopProvider } from "@redeemloop/react";
 
-export default function ProductPage() {
+export function Checkout() {
   return (
-    <RedeemLoopProvider apiBase="https://api.redeemloop.org">
+    <RedeemLoopProvider baseUrl="https://api.example.com" apiKey="merchant-api-key">
       <RedeemLoopPayButton
-        bindingId="rlb_coke_global_001"
-        platform="custom"
-        storeId="store_001"
-        sku="COKE-330ML-JP"
+        bindingId="bind_coffee"
+        orderId="ORDER-1001"
+        channel="checkout"
+        skuLines={[{ sku: "coffee-cup", quantity: 1 }]}
+        payerAddress="0xPayer"
+        balance="1"
+        onComplete={(result) => console.log(result.transfer)}
       />
     </RedeemLoopProvider>
   );
 }
 ```
 
-## 5. 自建商城后端
+The alpha button creates a PaymentIntent, optionally checks balance, and returns a wallet-ready transfer request. If `txid` and `autoSubmitProof` are supplied in a sandbox flow, it also submits a settlement proof.
 
-### 创建待支付订单
+### 5. Script Widget
+
+```html
+<div
+  data-redeemloop-pay-button
+  data-api-base-url="https://api.example.com"
+  data-api-key="merchant-api-key"
+  data-binding-id="bind_coffee"
+  data-order-id="ORDER-1001"
+  data-sku="coffee-cup"
+  data-payer-address="0xPayer"
+  data-balance="1"
+></div>
+<script type="module" src="/redeemloop-widget.js"></script>
+```
+
+The widget emits DOM events:
+
+```text
+redeemloop:intent
+redeemloop:balance
+redeemloop:transfer
+redeemloop:broadcasted
+redeemloop:paid
+redeemloop:error
+```
+
+### 6. EVM ERC-20 Payment Request
+
+The API exposes the wallet-facing steps:
 
 ```http
-POST /v1/payment-intents
-Content-Type: application/json
+POST /v1/payment-intents/:intentId/check-balance
+POST /v1/payment-intents/:intentId/transfer-requested
+POST /v1/payment-intents/:intentId/broadcasted
+POST /v1/settlement/proofs
+```
 
-{
-  "bindingId": "rlb_coke_global_001",
-  "merchantId": "coca-cola",
-  "storeId": "tokyo-store-001",
-  "channel": "website",
-  "orderId": "ORDER-10086",
-  "skuLines": [{ "sku": "COKE-330ML-JP", "quantity": 1 }]
+`check-balance` returns a `balanceOf(payer)` call request. `transfer-requested` returns ERC-20 `transfer(merchantVault, requiredAmount)` calldata with `value: 0x0`.
+
+### 7. Embed Origin Controls
+
+For local development, the API allows `http://localhost:3000` and `http://127.0.0.1:3000`.
+
+For merchant deployments, configure:
+
+```bash
+REDEEMLOOP_EMBED_ALLOWED_ORIGINS="https://shop.example,https://checkout.example"
+```
+
+Verified merchant domains are also accepted by the API CORS policy.
+
+### 8. WooCommerce and Shopify
+
+v0.2.1 provides the gateway surface, not production installable apps.
+
+WooCommerce should be implemented first as a native payment gateway plugin:
+
+```text
+Checkout payment method -> RedeemLoop Pay Button/widget -> settlement confirmation -> payment_complete
+```
+
+Shopify should initially use product-page buttons or external/manual payment bridge patterns. Do not block the early protocol on a Shopify payment app review.
+
+### 9. Current Limits
+
+- State is still in-memory.
+- Settlement proof is still client-submitted.
+- API keys are accepted by the SDK but not enforced by the demo API yet.
+- Webhook endpoint testing exists, but reliable delivery queues arrive in a later release.
+
+---
+
+## 中文
+
+### 1. 集成模型
+
+RedeemLoop 是一个外部提货券支付网关。电商系统仍然负责商品定价、订单、履约、税务、退款和客服。
+
+RedeemLoop 只负责这条路径：
+
+```text
+Asset Binding -> PaymentIntent -> 提货券转账请求 -> 收券确认 -> 电商 mark-as-paid
+```
+
+提货资产由商户自带。RedeemLoop 不发行、不 mint、不 etch、不 inscribe、不托管、不定价、不交易该资产。
+
+### 2. 商户配置流程
+
+1. 创建 merchant。
+2. 创建 merchant vault / 收券地址。
+3. 创建商品或服务 entitlement。
+4. 创建 Asset Binding，把可接受提货资产、entitlement、SKU、店铺目标、结算策略和收券地址绑定起来。
+5. 嵌入 React Pay Button 或 script widget。
+6. settlement 确认后接收 mark-as-paid 通知。
+
+### 3. SDK 流程
+
+```ts
+import { RedeemLoopClient } from "@redeemloop/sdk";
+
+const client = new RedeemLoopClient("https://api.example.com", "merchant-api-key");
+
+await client.createMerchant({ merchantId: "merchant_cafe", name: "Merchant Cafe" });
+await client.createMerchantVault({
+  merchantId: "merchant_cafe",
+  chainNamespace: "eip155",
+  chainId: 8453,
+  address: "0xMerchantVault",
+});
+
+await client.createEntitlement({
+  merchantId: "merchant_cafe",
+  entitlementId: "ent_coffee",
+  name: "Coffee pickup",
+  quantity: 1,
+  termsHash: "coffee-terms",
+});
+
+await client.createBinding({
+  bindingId: "bind_coffee",
+  merchantId: "merchant_cafe",
+  entitlementId: "ent_coffee",
+  acceptedAssets: [
+    {
+      chainNamespace: "eip155",
+      chainId: 8453,
+      assetType: "erc20",
+      assetId: "eip155:8453/erc20:0xVoucherToken",
+      contract: "0xVoucherToken",
+      requiredAmount: "1",
+      termsHash: "coffee-terms",
+    },
+  ],
+  merchantVaults: {
+    "eip155:8453": "0xMerchantVault",
+  },
+  settlementPolicy: "collect",
+  commerceTargets: [{ platform: "woocommerce", storeId: "woo-store", sku: "coffee-cup" }],
+  status: "active",
+  termsHash: "coffee-terms",
+});
+```
+
+### 4. React Pay Button
+
+```tsx
+import { RedeemLoopPayButton, RedeemLoopProvider } from "@redeemloop/react";
+
+export function Checkout() {
+  return (
+    <RedeemLoopProvider baseUrl="https://api.example.com" apiKey="merchant-api-key">
+      <RedeemLoopPayButton
+        bindingId="bind_coffee"
+        orderId="ORDER-1001"
+        channel="checkout"
+        skuLines={[{ sku: "coffee-cup", quantity: 1 }]}
+        payerAddress="0xPayer"
+        balance="1"
+        onComplete={(result) => console.log(result.transfer)}
+      />
+    </RedeemLoopProvider>
+  );
 }
 ```
 
-### 接收 webhook
+Alpha 阶段按钮会创建 PaymentIntent，可选执行余额检查，并返回钱包可用的转账请求。sandbox 流程中如果传入 `txid` 和 `autoSubmitProof`，也可以继续提交 settlement proof。
+
+### 5. Script Widget
+
+```html
+<div
+  data-redeemloop-pay-button
+  data-api-base-url="https://api.example.com"
+  data-api-key="merchant-api-key"
+  data-binding-id="bind_coffee"
+  data-order-id="ORDER-1001"
+  data-sku="coffee-cup"
+  data-payer-address="0xPayer"
+  data-balance="1"
+></div>
+<script type="module" src="/redeemloop-widget.js"></script>
+```
+
+widget 会发出 DOM 事件：
+
+```text
+redeemloop:intent
+redeemloop:balance
+redeemloop:transfer
+redeemloop:broadcasted
+redeemloop:paid
+redeemloop:error
+```
+
+### 6. EVM ERC-20 支付请求
+
+API 暴露面向钱包的步骤：
 
 ```http
-POST /redeemloop/webhook
-X-RedeemLoop-Timestamp: ...
-X-RedeemLoop-Nonce: ...
-X-RedeemLoop-Signature: ...
+POST /v1/payment-intents/:intentId/check-balance
+POST /v1/payment-intents/:intentId/transfer-requested
+POST /v1/payment-intents/:intentId/broadcasted
+POST /v1/settlement/proofs
 ```
 
-收到 `voucher.payment.confirmed` 或 `voucher.payment.paid` 后，把订单标记为已付款。
+`check-balance` 返回 `balanceOf(payer)` call request。`transfer-requested` 返回 ERC-20 `transfer(merchantVault, requiredAmount)` calldata，并且 `value: 0x0`。
 
-## 6. WooCommerce
+### 7. 嵌入来源控制
 
-第一版推荐实现 WooCommerce 原生 payment gateway 插件：
+本地开发默认允许 `http://localhost:3000` 和 `http://127.0.0.1:3000`。
+
+商户部署时配置：
+
+```bash
+REDEEMLOOP_EMBED_ALLOWED_ORIGINS="https://shop.example,https://checkout.example"
+```
+
+已验证的商户域名也会被 API CORS 策略放行。
+
+### 8. WooCommerce 和 Shopify
+
+v0.2.1 提供支付网关表面，但还不是可安装生产应用。
+
+WooCommerce 应优先实现为原生 payment gateway 插件：
 
 ```text
-Payment Method: RedeemLoop Voucher
-Order status after checkout: pending payment
-After settlement: payment_complete
+Checkout payment method -> RedeemLoop Pay Button/widget -> settlement confirmation -> payment_complete
 ```
 
-插件配置：
+Shopify 初期建议采用商品页按钮或 external/manual payment bridge 模式，不要让早期协议阻塞在 Shopify payment app 审核上。
 
-- merchantId
-- API key
-- webhook secret
-- default vaults
-- binding sync
-- confirmation policy
+### 9. 当前限制
 
-## 7. Shopify
-
-第一版建议使用外部/手动支付桥或商品页按钮模式：
-
-```text
-用户创建 pending order
-RedeemLoop 收券确认
-通过 Shopify adapter 标记订单已付款或进入可履约状态
-```
-
-不要把 v0.2 阻塞在平台原生 payment app 审核上。
-
-## 8. POS
-
-POS 或店员手机生成二维码：
-
-```text
-redeemloop://pay?intent=pi_123
-```
-
-用户扫码后钱包转券。店员屏幕显示：
-
-```text
-等待支付
-已广播
-已看到
-已确认
-可以交付
-```
-
-低价值商品可以配置 seen 即通过；高价值商品等待确认数。
-
-## 9. 直播带货和广告
-
-生成短链：
-
-```text
-https://pay.redeemloop.org/i/pi_123
-```
-
-用户打开后完成钱包转券。适合直播间、小程序、广告页、KOL 私域流量。
-
-## 10. Fallback：一次性兑换码
-
-若平台无法接入支付方式或 mark paid API，可以临时使用一次性兑换码桥：
-
-```text
-用户先在 RedeemLoop 转券
-RedeemLoop 生成一次性码
-用户在电商 checkout 输入该码
-```
-
-该方案只作为 fallback，不作为主推体验。
+- 状态仍是内存存储。
+- settlement proof 仍由客户端提交。
+- SDK 已支持 API key，但 demo API 尚未强制鉴权。
+- webhook endpoint test 已存在，可靠投递队列会在后续版本实现。
