@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  background: #f4f5f0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(90deg, rgba(23, 26, 31, 0.045) 1px, transparent 1px),
+    linear-gradient(rgba(23, 26, 31, 0.035) 1px, transparent 1px),
+    #f4f5f0;
+  background-size: 36px 36px;
+  color: #171a1f;
+  letter-spacing: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+::selection {
+  background: rgba(23, 107, 88, 0.2);
+}
+
+@layer components {
+  .input {
+    @apply min-h-11 w-full rounded-md border border-line bg-field px-3 py-2 text-sm text-ink outline-none transition focus:border-accent focus:bg-white focus:ring-2 focus:ring-accent/15;
+  }
+
+  .btn-secondary {
+    @apply inline-flex min-h-10 items-center justify-center rounded-md border border-line bg-white px-3 text-sm font-medium text-ink transition hover:border-accent hover:text-accent active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-flow {
+    @apply flex min-h-12 w-full items-center justify-between gap-4 rounded-md border border-line bg-field px-4 text-sm font-medium text-ink transition hover:border-accent hover:bg-white active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .status {
+    @apply inline-flex rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.16em];
+  }
+
+  .status-idle {
+    @apply bg-zinc-100 text-zinc-500;
+  }
+
+  .status-busy {
+    @apply bg-amber-100 text-amber-800;
+  }
+
+  .status-done {
+    @apply bg-emerald-100 text-emerald-800;
+  }
+
+  .status-error {
+    @apply bg-red-100 text-red-800;
+  }
+
+  .output {
+    @apply max-h-[360px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-line bg-field p-4 font-mono text-xs leading-5 text-zinc-700;
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "redeemloop-protocol",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm contracts:build && pnpm --filter @redeemloop/api build && pnpm --filter @redeemloop/pos-verifier build",
+    "test": "pnpm contracts:test && pnpm --filter @redeemloop/api test && pnpm --filter @redeemloop/pos-verifier test",
+    "lint": "pnpm --filter @redeemloop/contracts lint && pnpm --filter @redeemloop/api lint && pnpm --filter @redeemloop/pos-verifier lint",
+    "verify": "pnpm lint && pnpm test && pnpm build",
+    "contracts:build": "cd packages/contracts && forge build",
+    "contracts:test": "cd packages/contracts && forge test",
+    "contracts:fmt": "cd packages/contracts && forge fmt",
+    "anvil": "anvil",
+    "api:dev": "pnpm --filter @redeemloop/api dev",
+    "pos:dev": "pnpm --filter @redeemloop/pos-verifier dev"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "8.5.15",
+      "ws": "8.21.0"
+    }
+  }
+}

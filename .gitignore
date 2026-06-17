@@ -1,0 +1,17 @@
+node_modules
+.env
+.env.*
+out
+cache
+broadcast
+packages/contracts/lib
+coverage
+coverage.json
+.DS_Store
+dist
+.next
+.turbo
+*.tsbuildinfo
+task_plan.md
+findings.md
+progress.md
