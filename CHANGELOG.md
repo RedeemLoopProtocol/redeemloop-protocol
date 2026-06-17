@@ -4,6 +4,26 @@
 
 No unreleased changes yet.
 
+## v0.2.4 - 2026-06-18
+
+### Added
+
+- WooCommerce sandbox payment gateway plugin in `plugins/woocommerce/redeemloop-voucher-gateway.php`.
+- WooCommerce admin settings for API Base URL, Merchant ID, API Key, Default Binding ID, Webhook Secret, and widget script URL.
+- WooCommerce checkout `process_payment` flow that creates a RedeemLoop PaymentIntent and stores order metadata.
+- WooCommerce REST webhook endpoint for RedeemLoop mark-paid callbacks with HMAC signature verification.
+- `@redeemloop/widget` support for existing PaymentIntent IDs through `data-intent-id`.
+- Bilingual WooCommerce plugin installation guide.
+
+### 中文说明
+
+- 新增 WooCommerce sandbox payment gateway 插件：`plugins/woocommerce/redeemloop-voucher-gateway.php`。
+- WooCommerce 后台可配置 API Base URL、Merchant ID、API Key、Default Binding ID、Webhook Secret 和 widget script URL。
+- WooCommerce checkout `process_payment` 会创建 RedeemLoop PaymentIntent 并写入订单 metadata。
+- WooCommerce REST webhook endpoint 支持 RedeemLoop mark-paid callback，并校验 HMAC 签名。
+- `@redeemloop/widget` 支持通过 `data-intent-id` 复用已有 PaymentIntent。
+- 新增双语 WooCommerce 插件安装指南。
+
 ## v0.2.3 - 2026-06-18
 
 ### Added

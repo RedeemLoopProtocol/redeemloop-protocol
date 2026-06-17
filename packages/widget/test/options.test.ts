@@ -21,6 +21,7 @@ describe("readWidgetOptions", () => {
     expect(readWidgetOptions(element)).toEqual({
       apiBaseUrl: "http://localhost:8787",
       apiKey: undefined,
+      intentId: undefined,
       bindingId: "bind_test",
       orderId: "order_1",
       sku: "sku_1",
@@ -34,6 +35,20 @@ describe("readWidgetOptions", () => {
       transferReadyLabel: undefined,
       paidLabel: undefined,
       errorLabel: undefined,
+    });
+  });
+
+  it("accepts an existing PaymentIntent for checkout-return pages", () => {
+    const element = {
+      dataset: {
+        apiBaseUrl: "http://localhost:8787",
+        intentId: "pi_existing",
+      },
+    } as unknown as HTMLElement;
+
+    expect(readWidgetOptions(element)).toMatchObject({
+      apiBaseUrl: "http://localhost:8787",
+      intentId: "pi_existing",
     });
   });
 });

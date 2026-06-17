@@ -1,4 +1,4 @@
-# RedeemLoop Integration Guide v0.2.3 / 集成指南 v0.2.3
+# RedeemLoop Integration Guide v0.2.4 / 集成指南 v0.2.4
 
 ## English
 
@@ -179,13 +179,25 @@ Authorization: Bearer dev-secret
 
 ### 9. WooCommerce and Shopify
 
-v0.2.3 provides the gateway surface, not production installable apps.
+v0.2.4 includes a sandbox WooCommerce payment gateway plugin at:
+
+```text
+plugins/woocommerce/redeemloop-voucher-gateway.php
+```
 
 WooCommerce should be implemented first as a native payment gateway plugin:
 
 ```text
 Checkout payment method -> RedeemLoop Pay Button/widget -> settlement confirmation -> payment_complete
 ```
+
+The plugin provides:
+
+- WooCommerce payment method registration.
+- Admin settings for API Base URL, Merchant ID, API Key, Default Binding ID, Webhook Secret, and optional widget script URL.
+- PaymentIntent creation during checkout.
+- Order-received widget container using `data-intent-id`.
+- Webhook endpoint at `/wp-json/redeemloop/v1/woocommerce/mark-paid`.
 
 Shopify should initially use product-page buttons or external/manual payment bridge patterns. Do not block the early protocol on a Shopify payment app review.
 
@@ -376,13 +388,25 @@ Authorization: Bearer dev-secret
 
 ### 9. WooCommerce 和 Shopify
 
-v0.2.3 提供支付网关表面，但还不是可安装生产应用。
+v0.2.4 已包含 WooCommerce sandbox payment gateway 插件：
+
+```text
+plugins/woocommerce/redeemloop-voucher-gateway.php
+```
 
 WooCommerce 应优先实现为原生 payment gateway 插件：
 
 ```text
 Checkout payment method -> RedeemLoop Pay Button/widget -> settlement confirmation -> payment_complete
 ```
+
+插件提供：
+
+- WooCommerce payment method 注册。
+- 后台配置 API Base URL、Merchant ID、API Key、Default Binding ID、Webhook Secret 和可选 widget script URL。
+- checkout 时创建 PaymentIntent。
+- order-received 页面通过 `data-intent-id` 展示 widget 容器。
+- webhook endpoint：`/wp-json/redeemloop/v1/woocommerce/mark-paid`。
 
 Shopify 初期建议采用商品页按钮或 external/manual payment bridge 模式，不要让早期协议阻塞在 Shopify payment app 审核上。
 

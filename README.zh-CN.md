@@ -34,6 +34,7 @@ PaymentIntent
 - Merchant Embed Alpha：SDK 方法、React Pay Button、script-tag widget 和 demo store 页面。
 - 文件持久化 sandbox 和商户级 API key 校验，适用于本地和 pilot 环境。
 - 基于 transaction receipt 的可信 EVM ERC-20 settlement recheck。
+- WooCommerce sandbox payment gateway plugin。
 - 商户收券地址 / vault 确认模型。
 - Settlement proof 提交与幂等。
 - WooCommerce、Shopify、自定义 mark-as-paid 适配表面。
@@ -72,6 +73,7 @@ packages/widget    面向非 React 店铺的 script-tag widget
 packages/contracts EVM ERC-20 提货资产示例合约
 services/api       binding、intent、proof、webhook、电商适配 API
 apps/pos-verifier  本地 Phase 0 控制台、POS QR 演示和 demo store 页面
+plugins/woocommerce WooCommerce sandbox payment gateway 插件
 docs/              v0.2 协议、边界、API、集成和施工文档
 whitepaper/        v0.2 白皮书源码和渲染文件
 ```
@@ -201,6 +203,24 @@ POST /v1/settlement/proofs
 POST /v1/settlement/evm/recheck/:intentId
 POST /v1/webhook-endpoints
 POST /v1/webhook-endpoints/:id/test
+```
+
+## WooCommerce Sandbox 插件
+
+sandbox 插件位于 `plugins/woocommerce/redeemloop-voucher-gateway.php`。
+
+安装到测试 WordPress 店铺：
+
+```text
+wp-content/plugins/redeemloop-voucher-gateway/redeemloop-voucher-gateway.php
+```
+
+然后在 WooCommerce 支付设置中启用 **RedeemLoop Voucher**，配置 API Base URL、Merchant ID、API Key、Default Binding ID、Webhook Secret 和可选 widget script URL。
+
+Webhook endpoint：
+
+```text
+POST /wp-json/redeemloop/v1/woocommerce/mark-paid
 ```
 
 旧 v0.1 relayer 路由仅作为兼容测试保留。新集成应使用 v0.2 Asset Binding 和 PaymentIntent API。

@@ -3,8 +3,9 @@ import { RedeemLoopClient, type TransferRequestResponse } from "@redeemloop/sdk"
 export interface RedeemLoopWidgetOptions {
   apiBaseUrl: string;
   apiKey?: string;
-  bindingId: string;
-  orderId: string;
+  intentId?: string;
+  bindingId?: string;
+  orderId?: string;
   sku?: string;
   quantity?: number;
   payerAddress?: string;
@@ -43,13 +44,15 @@ export function mountRedeemLoopPayButton(element: HTMLElement, options: RedeemLo
   async function handleClick() {
     setButtonState(button, "working", options.workingLabel ?? "Preparing payment");
     try {
-      const intent = await client.createPaymentIntent({
-        bindingId: options.bindingId,
-        orderId: options.orderId,
-        channel: "checkout",
-        skuLines: options.sku ? [{ sku: options.sku, quantity: options.quantity ?? 1 }] : undefined,
-        payerAddress: options.payerAddress,
-      });
+      const intent = options.intentId
+        ? await client.getPaymentIntent(options.intentId)
+        : await client.createPaymentIntent({
+            bindingId: requireOption(options.bindingId, "bindingId"),
+            orderId: requireOption(options.orderId, "orderId"),
+            channel: "checkout",
+            skuLines: options.sku ? [{ sku: options.sku, quantity: options.quantity ?? 1 }] : undefined,
+            payerAddress: options.payerAddress,
+          });
       dispatchWidgetEvent(element, "redeemloop:intent", intent);
 
       const checked = options.payerAddress
@@ -109,11 +112,16 @@ export function autoMountRedeemLoopWidgets(root: ParentNode = document): RedeemL
 
 export function readWidgetOptions(element: HTMLElement): RedeemLoopWidgetOptions {
   const apiBaseUrl = requireDataset(element, "apiBaseUrl");
-  const bindingId = requireDataset(element, "bindingId");
-  const orderId = requireDataset(element, "orderId");
+  const intentId = element.dataset.intentId;
+  const bindingId = element.dataset.bindingId;
+  const orderId = element.dataset.orderId;
+  if (!intentId && (!bindingId || !orderId)) {
+    throw new Error("data-intent-id or both data-binding-id and data-order-id are required");
+  }
   return {
     apiBaseUrl,
     apiKey: element.dataset.apiKey,
+    intentId,
     bindingId,
     orderId,
     sku: element.dataset.sku,
@@ -174,5 +182,10 @@ function dispatchWidgetEvent(element: HTMLElement, eventName: string, detail: un
 function requireDataset(element: HTMLElement, key: string): string {
   const value = element.dataset[key];
   if (!value) throw new Error(`data-${key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`)} is required`);
+  return value;
+}
+
+function requireOption(value: string | undefined, fieldName: string): string {
+  if (!value) throw new Error(`${fieldName} is required`);
   return value;
 }
