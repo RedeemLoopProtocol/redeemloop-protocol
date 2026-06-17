@@ -2,7 +2,7 @@
 /**
  * Plugin Name: RedeemLoop Voucher Gateway
  * Description: Sandbox WooCommerce payment gateway for RedeemLoop voucher PaymentIntents.
- * Version: 0.2.5
+ * Version: 0.3.0
  * Author: RedeemLoop
  * License: MIT
  * Requires Plugins: woocommerce

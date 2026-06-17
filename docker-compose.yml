@@ -1,0 +1,37 @@
+name: redeemloop-sandbox
+
+services:
+  api:
+    build:
+      context: .
+    command: pnpm --filter @redeemloop/api start
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8787
+      REDEEMLOOP_STORAGE_FILE: /data/state.json
+      REDEEMLOOP_API_KEYS: '{"merchant_cafe":"dev-secret"}'
+      REDEEMLOOP_EMBED_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      EVM_MIN_CONFIRMATIONS: 1
+      WEBHOOK_MAX_ATTEMPTS: 5
+      RELAYER_DRY_RUN: "true"
+    ports:
+      - "8787:8787"
+    volumes:
+      - redeemloop-state:/data
+
+  console:
+    build:
+      context: .
+    command: pnpm --filter @redeemloop/pos-verifier start
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_REDEEMLOOP_API_BASE_URL: http://localhost:8787
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  redeemloop-state:

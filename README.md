@@ -36,6 +36,7 @@ This release fixes the first public implementation scope:
 - Trusted EVM ERC-20 settlement recheck from transaction receipts.
 - WooCommerce sandbox payment gateway plugin.
 - Webhook event outbox, signed delivery attempts, retry state, dead-letter status, and replay API.
+- Public Merchant Sandbox with Docker Compose, `.env.example`, environment checks, and API reference docs.
 - Merchant receiving address / vault confirmation model.
 - Settlement proof submission and idempotency.
 - WooCommerce, Shopify, and custom mark-as-paid adapter surface.
@@ -110,6 +111,16 @@ pnpm api:dev
 
 `REDEEMLOOP_STORAGE_FILE` persists merchants, vaults, entitlements, bindings, PaymentIntents, settlement proofs, idempotency keys, webhook endpoints, webhook events, webhook delivery records, and commerce payment records across API restarts. It is a sandbox persistence adapter, not a production database replacement.
 `REDEEMLOOP_API_KEYS` accepts comma-separated `merchantId:apiKey` entries or a JSON object string. When configured, merchant-scoped `/v1` API calls must include `Authorization: Bearer <apiKey>`.
+
+Public merchant sandbox:
+
+```bash
+cp .env.example .env
+pnpm env:check
+docker compose up --build
+```
+
+Open `http://localhost:3000` for the console and `http://localhost:8787/health` for the API health check.
 
 Trusted EVM settlement recheck can be enabled with:
 
@@ -280,6 +291,8 @@ manual_review
 - [Construction Guide](docs/CONSTRUCTION.md)
 - [Protocol Spec](docs/PROTOCOL_SPEC.md)
 - [Integration Guide](docs/INTEGRATION_GUIDE.md)
+- [Public Merchant Sandbox](docs/PUBLIC_SANDBOX.md)
+- [API Reference](docs/API_REFERENCE.md)
 - [Commerce Adapters](docs/COMMERCE_ADAPTERS.md)
 - [API and Data Model](docs/API_AND_DATA_MODEL.md)
 - [Security and Compliance](docs/SECURITY_COMPLIANCE.md)
@@ -323,6 +336,7 @@ PaymentIntent
 - 基于 transaction receipt 的可信 EVM ERC-20 settlement recheck。
 - WooCommerce sandbox payment gateway plugin。
 - Webhook event outbox、签名投递、重试状态、dead-letter 状态和 replay API。
+- Public Merchant Sandbox：Docker Compose、`.env.example`、环境检查和 API reference 文档。
 - 商户收券地址 / vault 确认模型。
 - Settlement proof 提交与幂等。
 - WooCommerce、Shopify、自定义 mark-as-paid 适配表面。
@@ -482,6 +496,8 @@ manual_review
 - [施工文档](docs/CONSTRUCTION.md)
 - [协议规格](docs/PROTOCOL_SPEC.md)
 - [集成指南](docs/INTEGRATION_GUIDE.md)
+- [Public Merchant Sandbox](docs/PUBLIC_SANDBOX.md)
+- [API Reference](docs/API_REFERENCE.md)
 - [电商适配](docs/COMMERCE_ADAPTERS.md)
 - [API 与数据模型](docs/API_AND_DATA_MODEL.md)
 - [安全与合规](docs/SECURITY_COMPLIANCE.md)

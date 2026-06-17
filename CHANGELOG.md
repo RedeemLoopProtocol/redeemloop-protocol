@@ -4,6 +4,26 @@
 
 No unreleased changes yet.
 
+## v0.3.0 - 2026-06-18
+
+### Added
+
+- Public Merchant Sandbox with `Dockerfile`, `docker-compose.yml`, and `.env.example`.
+- Production `start` scripts for the API service and Phase 0 console.
+- Environment validation script with sandbox and production modes.
+- `docs/PUBLIC_SANDBOX.md` with bilingual Docker/local sandbox steps and pilot checklist.
+- `docs/API_REFERENCE.md` with bilingual endpoint reference.
+- README links and quick-start commands for the public sandbox.
+
+### 中文说明
+
+- 新增 Public Merchant Sandbox：`Dockerfile`、`docker-compose.yml` 和 `.env.example`。
+- API service 和 Phase 0 console 新增 production `start` script。
+- 新增环境检查脚本，支持 sandbox 和 production 模式。
+- 新增 `docs/PUBLIC_SANDBOX.md`，包含双语 Docker/本地 sandbox 步骤和 pilot checklist。
+- 新增 `docs/API_REFERENCE.md`，提供双语 endpoint reference。
+- README 新增 public sandbox 链接和快速开始命令。
+
 ## v0.2.5 - 2026-06-18
 
 ### Added

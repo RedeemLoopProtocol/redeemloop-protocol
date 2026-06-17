@@ -36,6 +36,7 @@ PaymentIntent
 - 基于 transaction receipt 的可信 EVM ERC-20 settlement recheck。
 - WooCommerce sandbox payment gateway plugin。
 - Webhook event outbox、签名投递、重试状态、dead-letter 状态和 replay API。
+- Public Merchant Sandbox：Docker Compose、`.env.example`、环境检查和 API reference 文档。
 - 商户收券地址 / vault 确认模型。
 - Settlement proof 提交与幂等。
 - WooCommerce、Shopify、自定义 mark-as-paid 适配表面。
@@ -110,6 +111,16 @@ pnpm api:dev
 
 `REDEEMLOOP_STORAGE_FILE` 会把 merchant、vault、entitlement、binding、PaymentIntent、settlement proof、幂等 key、webhook endpoint、webhook event、webhook delivery record 和 commerce payment record 持久化到本地文件，API 重启后仍可恢复。它是 sandbox persistence adapter，不是生产数据库替代品。
 `REDEEMLOOP_API_KEYS` 支持逗号分隔的 `merchantId:apiKey`，也支持 JSON object 字符串。配置后，商户级 `/v1` API 调用必须携带 `Authorization: Bearer <apiKey>`。
+
+Public merchant sandbox：
+
+```bash
+cp .env.example .env
+pnpm env:check
+docker compose up --build
+```
+
+打开 `http://localhost:3000` 查看控制台，打开 `http://localhost:8787/health` 查看 API health check。
 
 可信 EVM settlement recheck 可以这样启用：
 
@@ -280,6 +291,8 @@ manual_review
 - [施工文档](docs/CONSTRUCTION.md)
 - [协议规格](docs/PROTOCOL_SPEC.md)
 - [集成指南](docs/INTEGRATION_GUIDE.md)
+- [Public Merchant Sandbox](docs/PUBLIC_SANDBOX.md)
+- [API Reference](docs/API_REFERENCE.md)
 - [电商适配](docs/COMMERCE_ADAPTERS.md)
 - [API 与数据模型](docs/API_AND_DATA_MODEL.md)
 - [安全与合规](docs/SECURITY_COMPLIANCE.md)

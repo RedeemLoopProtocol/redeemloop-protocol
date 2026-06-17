@@ -1,4 +1,4 @@
-# RedeemLoop API 与数据模型 v0.2
+# RedeemLoop API 与数据模型 v0.3
 
 ## 1. REST API
 

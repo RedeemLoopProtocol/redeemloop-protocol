@@ -1,7 +1,7 @@
 {
   "name": "redeemloop-protocol",
   "private": true,
-  "version": "0.2.5",
+  "version": "0.3.0",
   "license": "MIT",
   "packageManager": "pnpm@10.32.1",
   "engines": {
@@ -14,6 +14,9 @@
     "test": "pnpm contracts:test && pnpm --filter @redeemloop/core test && pnpm --filter @redeemloop/adapters test && pnpm --filter @redeemloop/sdk test && pnpm --filter @redeemloop/react test && pnpm --filter @redeemloop/widget test && pnpm --filter @redeemloop/api test && pnpm --filter @redeemloop/pos-verifier test",
     "lint": "pnpm --filter @redeemloop/core lint && pnpm --filter @redeemloop/adapters lint && pnpm --filter @redeemloop/sdk lint && pnpm --filter @redeemloop/react lint && pnpm --filter @redeemloop/widget lint && pnpm --filter @redeemloop/api lint && pnpm --filter @redeemloop/pos-verifier lint",
     "verify": "pnpm lint && pnpm test && pnpm build",
+    "env:check": "node scripts/validate-env.mjs",
+    "env:check:production": "node scripts/validate-env.mjs --production",
+    "sandbox:up": "docker compose up --build",
     "contracts:build": "cd packages/contracts && forge build",
     "contracts:test": "cd packages/contracts && forge test",
     "contracts:fmt": "cd packages/contracts && forge fmt",
