@@ -1,73 +1,89 @@
-# RedeemLoop 施工文档
+# RedeemLoop v0.2 施工文档
 
-本文给 Codex 或开发团队使用, 目标是把 RedeemLoop 从设计稿落成可运行、可测试、可发布的开源项目。
+本文件给 Codex 和开发线程使用。目标是发布 RedeemLoop v0.2：一个非常克制的多链提货券支付协议。
 
-## 0. 产品判断
+## 0. 非协商原则
 
-RedeemLoop 不是 NFT 提货券项目, 也不是积分系统。第一版必须坚持:
-
-```text
-FT-first + 一键植入 + 核销模式可配置 + 现有加密基础设施原生流转
-```
-
-第一版主线:
+必须遵守：
 
 ```text
-ERC-20 Voucher, decimals = 0
-1 token = 1 个完整商品或服务权益
-核销时支持 burn 或 collect
-collect 后 token 进入 Merchant Vault, 可再次分发
+1. RedeemLoop 不发行资产，只绑定资产。
+2. RedeemLoop 不做 token 定价引擎，只做外部提货券支付方式。
+3. RedeemLoop 不做电商后端，只通知订单已付款。
+4. RedeemLoop 不做二级市场。
+5. 第一版 EVM ERC-20 先跑通，但 Bitcoin / Fractal / Rune / Inscription 必须在类型和 adapter 边界中一等支持。
 ```
 
-## 1. MVP 闭环
-
-第一版只做一个完整闭环:
+## 1. v0.2 最小闭环
 
 ```text
-厂商创建 Voucher
-厂商把 token 发给用户
-用户在 POS Verifier 扫码兑换
-用户签名授权
-门店 relayer 提交交易
-token 被 burn 或进入 Merchant Vault
-POS 显示核销成功
-后台看到 redemption event
+商户在后台创建 Asset Binding
+        ↓
+绑定已存在的 ERC-20 / Rune / Inscription / NFT 等资产
+        ↓
+绑定商品 SKU 或 Entitlement Group
+        ↓
+生成商品页按钮或结账页支付方式
+        ↓
+用户连接钱包并检测持券
+        ↓
+电商创建待付款订单
+        ↓
+RedeemLoop 创建 PaymentIntent
+        ↓
+用户把资产转给商户收券地址
+        ↓
+Settlement Worker 确认到账
+        ↓
+Commerce Adapter markOrderPaid
 ```
 
-不要在 MVP 做:
-
-- NFT。
-- 二级市场。
-- 多链桥。
-- 积分。
-- 复杂 KYC。
-- 复杂库存系统。
-- 移动 App。
-
-## 2. 仓库初始化
-
-建议使用 pnpm workspace。
+## 2. 仓库结构
 
 ```text
 redeemloop-protocol/
   package.json
   pnpm-workspace.yaml
-  foundry.toml
-  docker-compose.yml
-  packages/contracts
-  packages/sdk
-  packages/react
-  packages/widget
-  apps/merchant-console
-  apps/pos-verifier
-  apps/demo-store
-  services/api
-  services/indexer
-  services/commerce-bridge
-  docs
+  packages/
+    core/
+      src/types.ts
+      src/validators.ts
+      src/state-machine.ts
+    sdk/
+      src/client.ts
+      src/payment-intent.ts
+      src/bindings.ts
+    react/
+      src/RedeemLoopPayButton.tsx
+    widget/
+      src/index.ts
+    adapters/
+      src/evm.ts
+      src/bitcoin.ts
+      src/fractal.ts
+      src/wallets.ts
+      src/indexers.ts
+  services/
+    api/
+    settlement-worker/
+    commerce-bridge/
+    indexer-gateway/
+  apps/
+    merchant-console/
+    demo-store/
+    pos-verifier/
+  examples/
+    evm-erc20-voucher/
+    bitcoin-rune-binding/
+    fractal-rune-binding/
+  docs/
 ```
 
-### 根 package.json
+## 3. Package 初始化
+
+使用 pnpm workspace。
+
+根 package.json 必须至少包含：
 
 ```json
 {
@@ -79,277 +95,272 @@ redeemloop-protocol/
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "contracts:test": "cd packages/contracts && forge test",
-    "contracts:fmt": "cd packages/contracts && forge fmt",
-    "contracts:slither": "cd packages/contracts && slither ."
+    "typecheck": "pnpm -r typecheck"
   }
 }
 ```
 
-## 3. 合约施工
+## 4. Core 类型优先
 
-### 3.1 合约包依赖
+先实现 `packages/core/src/types.ts`。
 
-使用:
+必须包含：
 
-- Solidity 0.8.25+
-- Foundry
-- OpenZeppelin Contracts
+- `VoucherAssetDescriptor`
+- `Entitlement`
+- `CommerceTarget`
+- `RedemptionBinding`
+- `RedeemLoopPaymentIntent`
+- `VoucherPaymentProof`
+- `SettlementPolicy`
+- `PaymentIntentStatus`
+- `ChainNamespace`
+- `AssetType`
 
-第一批合约:
+核心包不得 import 任何发行器代码。
+
+## 5. PaymentIntent 状态机
+
+状态：
 
 ```text
-RedeemLoopERC20Voucher.sol
-MerchantVault.sol
-MerchantRegistry.sol
-StoreTerminalRegistry.sol
-RedemptionRouter.sol
-TermsRegistry.sol
-CampaignDistributor.sol
+created
+wallet_connected
+asset_selected
+transfer_requested
+broadcasted
+seen
+confirmed
+paid
+expired
+failed
+cancelled
+manual_review
 ```
 
-### 3.2 RedeemLoopERC20Voucher
+规则：
 
-必须实现:
+- 只有 `created/wallet_connected/asset_selected` 可以进入 `transfer_requested`。
+- 只有 `transfer_requested/broadcasted` 可以进入 `seen`。
+- 只有 `seen` 可以进入 `confirmed`。
+- 只有 `confirmed` 可以进入 `paid`。
+- 任何未完成状态可以进入 `expired`。
+- `paid` 终态不可逆。
+- Webhook 必须幂等。
 
-- ERC-20。
-- decimals = 0。
-- maxSupply。
-- mint role。
-- sealMinting。
-- pause。
-- termsHash。
-- merchantId。
-- merchantVault。
-- redemptionMode。
-- collectWithAuthorization。
-- burnWithAuthorization。
+## 6. Merchant Console
 
-### 3.3 collectWithAuthorization
+Merchant Console 第一版只实现 Asset Binding Wizard。
 
-EIP-712 typed data:
+页面：
 
-```solidity
-struct RedeemAuthorization {
-    address user;
-    address voucherToken;
-    uint256 tokenId;
-    uint256 amount;
-    bytes32 merchantId;
-    bytes32 storeId;
-    bytes32 terminalId;
-    bytes32 termsHash;
-    uint8 redemptionMode;
-    uint256 nonce;
-    uint256 deadline;
+```text
+/bindings
+/bindings/new
+/bindings/:id
+/vaults
+/webhooks
+/embed-code
+```
+
+Wizard 步骤：
+
+1. 选择资产类型。
+2. 填入资产标识。
+3. 验证资产可读取。
+4. 绑定商品权益。
+5. 绑定 SKU / Entitlement Group。
+6. 配置商户收券地址。
+7. 验证商户收券地址控制权。
+8. 配置 settlement policy。
+9. 生成嵌入代码。
+
+不得实现发行按钮。
+
+## 7. EVM ERC-20 MVP
+
+第一版运行时只需要完整实现 EVM ERC-20 流程：
+
+```text
+balanceOf(user)
+transfer(merchantVault, requiredAmount)
+监听 Transfer event
+匹配 PaymentIntent
+markOrderPaid
+```
+
+要求：
+
+- 支持 chainId。
+- 支持多个 RPC endpoint fallback。
+- 支持 decimals 检查，推荐 decimals = 0，但不强制阻断。
+- 支持用户复制 txid 后手动补录。
+- Transfer proof 必须包含 blockNumber、txHash、logIndex、from、to、amount、contract。
+
+## 8. Bitcoin / Fractal 接口
+
+v0.2 必须实现接口和类型，不要求完整生产运行时。
+
+必须包含：
+
+```ts
+interface PsbtBuilderAdapter {
+  buildTransferPsbt(input: PsbtTransferInput): Promise<PsbtBuildResult>;
+}
+
+interface BitcoinWalletAdapter {
+  connect(): Promise<WalletAccount>;
+  signPsbt(psbtBase64: string): Promise<string>;
+  broadcast?(signedPsbtBase64: string): Promise<string>;
+}
+
+interface IndexerAdapter {
+  getBalance(address: string, asset: VoucherAssetDescriptor): Promise<AssetBalance>;
+  getTransferProof(txid: string, asset: VoucherAssetDescriptor): Promise<VoucherPaymentProof>;
 }
 ```
 
-验证顺序:
-
-1. `block.timestamp <= deadline`。
-2. nonce 未使用。
-3. recovered signer == user。
-4. token、termsHash、merchantId、mode 匹配。
-5. storeId/terminalId 在 StoreTerminalRegistry 中有效。
-6. 用户余额足够。
-7. 如果 COLLECT: transfer 到 MerchantVault。
-8. 如果 BURN: burn。
-9. emit VoucherRedeemed。
-10. 标记 nonce 已使用。
-
-### 3.4 MerchantVault
-
-MerchantVault 需要:
-
-- 接收 token。
-- 记录 quarantine until。
-- 只允许授权 distributor 从 vault 发券。
-- 支持 rescue 误转 token, 但必须多签/管理员限制。
-- 支持 pause。
-
-### 3.5 测试要求
-
-Foundry 测试必须覆盖:
-
-- mint 上限。
-- seal 后不能 mint。
-- decimals 为 0。
-- collect 成功。
-- burn 成功。
-- nonce 重放失败。
-- deadline 过期失败。
-- 非授权门店失败。
-- 错误 termsHash 失败。
-- pause 后失败。
-- vault quarantine。
-- fuzz amount 和 nonce。
-
-## 4. 后端 API 施工
-
-建议 NestJS 或 Fastify。MVP 可以用 Fastify 提速。
-
-### 4.1 API 模块
+支持 assetType：
 
 ```text
-AuthModule
-MerchantModule
-VoucherModule
-CampaignModule
-TerminalModule
-RedemptionModule
-RelayerModule
-IndexerModule
-WebhookModule
+rune
+inscription
+brc20_optional
 ```
 
-### 4.2 主要接口
+chainNamespace：
 
-```http
-POST /v1/merchants
-POST /v1/voucher-classes
-POST /v1/campaigns
-POST /v1/campaigns/:id/claim-intents
-POST /v1/redemptions/intents
-POST /v1/redemptions/submit
-GET  /v1/wallets/:address/vouchers
-GET  /v1/merchants/:id/stats
-POST /v1/terminals/register
-POST /v1/webhooks/commerce
+```text
+bitcoin
+fractal
 ```
 
-### 4.3 Relayer
+## 9. Commerce Adapter
 
-Relayer 只负责提交用户签名过的交易, 不能替用户签名。Relayer 必须:
-
-- 校验签名。
-- 校验 terminal。
-- 限流。
-- 防重复提交。
-- 保存 tx hash。
-- 失败重试。
-
-## 5. 前端施工
-
-### 5.1 packages/sdk
-
-提供 TypeScript SDK:
+统一接口：
 
 ```ts
-createClient(config)
-getVoucherBalance(input)
-createClaimIntent(input)
-claim(input)
-createRedeemAuthorization(input)
-submitRedemption(input)
-getMerchantVouchers(input)
+interface CommerceAdapter {
+  getProductContext(input: ProductContextInput): Promise<ProductContext>;
+  createPendingOrder(input: CreatePendingOrderInput): Promise<CommerceOrder>;
+  markOrderPaid(input: MarkOrderPaidInput): Promise<void>;
+  cancelPendingOrder(input: CancelOrderInput): Promise<void>;
+}
 ```
 
-### 5.2 packages/react
-
-提供 React 组件:
-
-```tsx
-<RedeemLoopProvider />
-<ClaimButton />
-<BuyButton />
-<RedeemButton />
-<VoucherBalance />
-<VoucherWallet />
-```
-
-### 5.3 packages/widget
-
-生成 CDN script 版本:
-
-```html
-<script src="https://cdn.redeemloop.org/widget/v0/redeemloop.js"></script>
-<div data-rdl-widget="claim" ...></div>
-```
-
-Widget 初始化逻辑:
-
-1. 扫描 `[data-rdl-widget]`。
-2. 读取 merchant、campaign、token、chainId。
-3. 渲染按钮。
-4. 连接钱包或 embedded wallet。
-5. 调用 SDK。
-
-### 5.4 POS Verifier
-
-页面:
-
-- 门店登录。
-- 选择商品。
-- 输入 amount。
-- 生成 QR。
-- 等待用户签名。
-- 提交 redemption。
-- 展示成功/失败。
-
-## 6. 数据库施工
-
-使用 PostgreSQL。
-
-MVP 表:
-
-```sql
-merchants(id, display_name, domain, admin_wallet, default_vault, status, created_at)
-voucher_classes(id, merchant_id, chain_id, token_address, profile, symbol, decimals, max_supply, redemption_mode, terms_hash, terms_uri, status)
-campaigns(id, merchant_id, voucher_class_id, source_type, source_vault, per_wallet_limit, start_at, end_at, status)
-stores(id, merchant_id, region, name, status)
-terminals(id, store_id, public_key, operator_wallet, status)
-redemptions(id, merchant_id, store_id, terminal_id, user_wallet, token_address, token_id, amount, mode, status, nonce, tx_hash, created_at)
-indexer_events(id, chain_id, contract_address, event_name, tx_hash, log_index, payload, created_at)
-```
-
-## 7. Indexer 施工
-
-MVP 可用 viem 监听事件。后续可替换 Ponder 或 Subgraph。
-
-监听:
-
-- Transfer。
-- VoucherRedeemed。
-- VoucherIssued。
-- VoucherReissued。
-- TerminalAuthorized。
-- MintingSealed。
-
-要求:
-
-- 支持断点续扫。
-- 支持 reorg 处理。
-- event 幂等写入。
-- tx hash + log index 唯一。
-
-## 8. CommerceBridge 施工
-
-v0.1.0 先实现 EVM voucher payment button、商户收券地址、Shopify/WooCommerce mark-as-paid dry-run/live adapter。生产版仍需持久化队列、重试、速率限制和平台权限审计。
-
-兑换流程:
+第一版必须至少实现一个：
 
 ```text
-cart line item 匹配 terms
-用户签名
-token collect/burn
-Shopify orderMarkAsPaid 或 WooCommerce set_paid
-商户按平台订单履约
+demo-store adapter 或 WooCommerce adapter
 ```
 
-第一版不接物流履约, 只完成支付确认和平台标记已支付。
+Shopify 第一版只做设计和外部/手动支付桥，不强制完整实现。
 
-## 9. 发布要求
+## 10. Widget / React
 
-每个 PR 必须满足:
+商品页按钮要做：
 
-- `forge test` 通过。
-- TypeScript test 通过。
-- lint 通过。
-- README 中本地启动命令有效。
-- demo 可点击。
-- 至少一个 e2e 脚本可运行。
+- 读取 bindingId / productId / sku。
+- 查询绑定。
+- 展示可接受资产。
+- 连接钱包。
+- 检测余额。
+- 创建 pending order。
+- 创建 PaymentIntent。
+- 引导用户转券。
+- 轮询或订阅支付状态。
+- 展示成功/失败。
 
-## 10. 第一个 Codex 任务
+## 11. Webhook
 
-把 `docs/CODEX_PROMPT.md` 的内容作为首次任务投给 Codex。要求它只完成 Phase 0, 不要扩展范围。
+事件：
+
+```text
+voucher.payment.seen
+voucher.payment.confirmed
+voucher.payment.paid
+voucher.payment.failed
+voucher.payment.expired
+```
+
+签名：
+
+```text
+X-RedeemLoop-Timestamp
+X-RedeemLoop-Nonce
+X-RedeemLoop-Signature
+```
+
+签名内容：
+
+```text
+timestamp + "." + nonce + "." + rawBody
+```
+
+要求：
+
+- 时间窗口默认 5 分钟。
+- nonce 防重放。
+- markOrderPaid 幂等。
+
+## 12. 数据库表
+
+至少包含：
+
+```text
+merchants
+merchant_domains
+merchant_vaults
+entitlements
+redemption_bindings
+binding_assets
+commerce_targets
+payment_intents
+payment_proofs
+webhook_endpoints
+webhook_deliveries
+audit_logs
+```
+
+## 13. 测试要求
+
+单元测试：
+
+- 类型校验。
+- binding 创建与暂停。
+- PaymentIntent 状态机。
+- Webhook 签名。
+- 幂等 mark paid。
+- EVM transfer proof 匹配。
+- 错误资产不匹配。
+- 错误商户地址不匹配。
+- 过期 intent 不可支付。
+
+E2E：
+
+```text
+创建 binding
+创建订单
+连接 mock wallet
+模拟 ERC-20 transfer
+settlement worker 确认
+webhook mark paid
+订单状态更新
+```
+
+## 14. Definition of Done
+
+v0.2 可以发布的条件：
+
+```text
+1. README、白皮书、边界文档完成。
+2. core 类型和状态机完成。
+3. API 可以创建 binding 和 PaymentIntent。
+4. EVM ERC-20 demo 支付跑通。
+5. 至少一个 commerce adapter 能 mark paid。
+6. widget 或 React button 能完成 demo。
+7. Webhook 签名和幂等完成。
+8. Bitcoin / Fractal adapter interface 已定义。
+9. 没有发行器入口。
+10. 没有 marketplace 入口。
+```

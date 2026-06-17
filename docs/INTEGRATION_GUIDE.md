@@ -1,110 +1,176 @@
-# RedeemLoop Integration Guide
+# RedeemLoop 集成指南 v0.2
 
-## 1. 官网一键植入
+## 1. 集成思路
+
+RedeemLoop 不是让电商平台支持 token 原生定价，而是让电商平台多一个外部支付方式：
+
+```text
+RedeemLoop Voucher
+```
+
+商品价格、订单、物流、售后继续由原平台处理。RedeemLoop 只在链上收券确认后通知平台：
+
+```text
+这笔订单已使用提货券支付成功。
+```
+
+## 2. 厂商接入流程
+
+1. 厂商自己发行或准备链上提货资产。
+2. 在 RedeemLoop Console 创建 Asset Binding。
+3. 填入资产描述符。
+4. 填入商品权益条款。
+5. 选择商品 SKU 或权益组。
+6. 配置商户收券地址。
+7. 验证收券地址控制权。
+8. 配置 webhook。
+9. 安装商品页按钮、结账页支付方式或 POS QR。
+
+## 3. 商品页按钮
 
 ```html
-<script src="https://cdn.redeemloop.org/widget/v0/redeemloop.js"></script>
+<script src="https://cdn.redeemloop.org/pay/v0/redeemloop-pay.js"></script>
 <div
-  data-rdl-widget="claim"
-  data-rdl-merchant="merchant-id"
-  data-rdl-campaign="campaign-id"
-  data-rdl-token="0xVoucherToken"
-  data-rdl-chain-id="8453">
+  data-rl-pay-button
+  data-binding-id="rlb_coke_global_001"
+  data-platform="custom"
+  data-store-id="store_001"
+  data-product-id="prod_001"
+  data-sku="COKE-330ML-JP">
 </div>
 ```
 
-Widget 类型:
+按钮行为：
 
 ```text
-claim     领取券
-buy       购买券
-balance   展示余额
-redeem    兑换券
-wallet    展示该品牌券包
+查询 binding
+展示支持的钱包与资产
+连接钱包
+检测持券
+创建 pending order
+创建 PaymentIntent
+引导转券
+等待确认
+跳转成功页
 ```
 
-## 2. React
+## 4. React 集成
 
 ```tsx
-<RedeemLoopProvider chainId={8453} merchantId="coca-cola">
-  <VoucherBalance token="0xVoucherToken" />
-  <ClaimButton campaignId="summer-2026" />
-  <RedeemButton sku="coke-bottle" mode="collect" />
-</RedeemLoopProvider>
+import { RedeemLoopProvider, RedeemLoopPayButton } from '@redeemloop/react';
+
+export default function ProductPage() {
+  return (
+    <RedeemLoopProvider apiBase="https://api.redeemloop.org">
+      <RedeemLoopPayButton
+        bindingId="rlb_coke_global_001"
+        platform="custom"
+        storeId="store_001"
+        sku="COKE-330ML-JP"
+      />
+    </RedeemLoopProvider>
+  );
+}
 ```
 
-## 3. 小程序与 H5
+## 5. 自建商城后端
 
-小程序生成 claim link:
+### 创建待支付订单
+
+```http
+POST /v1/payment-intents
+Content-Type: application/json
+
+{
+  "bindingId": "rlb_coke_global_001",
+  "merchantId": "coca-cola",
+  "storeId": "tokyo-store-001",
+  "channel": "website",
+  "orderId": "ORDER-10086",
+  "skuLines": [{ "sku": "COKE-330ML-JP", "quantity": 1 }]
+}
+```
+
+### 接收 webhook
+
+```http
+POST /redeemloop/webhook
+X-RedeemLoop-Timestamp: ...
+X-RedeemLoop-Nonce: ...
+X-RedeemLoop-Signature: ...
+```
+
+收到 `voucher.payment.confirmed` 或 `voucher.payment.paid` 后，把订单标记为已付款。
+
+## 6. WooCommerce
+
+第一版推荐实现 WooCommerce 原生 payment gateway 插件：
 
 ```text
-https://app.redeemloop.org/claim?merchant=coca-cola&campaign=summer-2026
+Payment Method: RedeemLoop Voucher
+Order status after checkout: pending payment
+After settlement: payment_complete
 ```
 
-小程序生成 redeem link:
+插件配置：
+
+- merchantId
+- API key
+- webhook secret
+- default vaults
+- binding sync
+- confirmation policy
+
+## 7. Shopify
+
+第一版建议使用外部/手动支付桥或商品页按钮模式：
 
 ```text
-https://app.redeemloop.org/redeem?merchant=coca-cola&store=tokyo-store-001&terminal=pos-07&token=0xVoucherToken&amount=1
+用户创建 pending order
+RedeemLoop 收券确认
+通过 Shopify adapter 标记订单已付款或进入可履约状态
 ```
 
-## 4. 直播带货
+不要把 v0.2 阻塞在平台原生 payment app 审核上。
 
-直播间发放流程:
+## 8. POS
+
+POS 或店员手机生成二维码：
 
 ```text
-创建 campaign
-选择 token 来源: mint 或 Merchant Vault
-设置 per-wallet limit
-生成 QR
-用户扫码领取
-后台统计领取和后续兑换
+redeemloop://pay?intent=pi_123
 ```
 
-## 5. 实体店 POS
-
-POS QR:
+用户扫码后钱包转券。店员屏幕显示：
 
 ```text
-redeemloop://redeem?chainId=8453&token=0xVoucherToken&amount=1&storeId=tokyo-store-001&terminalId=pos-07&nonce=0x...
+等待支付
+已广播
+已看到
+已确认
+可以交付
 ```
 
-POS 验券步骤:
+低价值商品可以配置 seen 即通过；高价值商品等待确认数。
 
-1. 检查商品是否匹配 voucher terms。
-2. 生成 redeem intent。
-3. 用户钱包签名。
-4. POS 提交签名给 relayer。
-5. relayer 调用链上 `collectWithAuthorization` 或 `burnWithAuthorization`。
-6. POS 展示结果。
+## 9. 直播带货和广告
 
-## 6. 电商 checkout
-
-Phase 0 API 顺序:
+生成短链：
 
 ```text
-POST /v1/merchants/:merchantId/receiving-address
-POST /v1/commerce/payment-intents
-POST /v1/redemptions/intents
-POST /v1/redemptions/submit
-POST /v1/commerce/confirm
+https://pay.redeemloop.org/i/pi_123
 ```
 
-购物车匹配:
+用户打开后完成钱包转券。适合直播间、小程序、广告页、KOL 私域流量。
+
+## 10. Fallback：一次性兑换码
+
+若平台无法接入支付方式或 mark paid API，可以临时使用一次性兑换码桥：
 
 ```text
-cart.sku == voucher.terms.sku
-cart.quantity <= voucher.balance
-region allowed
-not expired
-not paused
+用户先在 RedeemLoop 转券
+RedeemLoop 生成一次性码
+用户在电商 checkout 输入该码
 ```
 
-支付结果:
-
-```text
-用户用 1 个 ERC-20 voucher 完成商品兑换权支付
-relayer 验证 EIP-712 签名并 collect/burn voucher
-Shopify 调用 orderMarkAsPaid
-WooCommerce 调用 set_paid + processing
-不是折扣抵扣, 不是积分补差价
-```
+该方案只作为 fallback，不作为主推体验。

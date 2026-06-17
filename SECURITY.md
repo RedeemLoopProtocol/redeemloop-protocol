@@ -2,15 +2,15 @@
 
 ## Status
 
-RedeemLoop `v0.1.0` is unaudited prototype code for local development and public review.
+RedeemLoop `v0.2.0` is unaudited prototype code for local development and public review.
 
-Do not use it with real funds, live customer data, production redemption inventory, or mainnet deployments without independent review.
+Do not use it with real funds, live customer data, production order flows, or mainnet deployments without independent security and legal review.
 
 ## Supported Versions
 
 | Version | Supported |
 |---------|-----------|
-| `v0.1.x` | Security fixes accepted |
+| `v0.2.x` | Security fixes accepted |
 
 ## Reporting a Vulnerability
 
@@ -22,9 +22,11 @@ If private advisories are not enabled, open a minimal public issue asking for a 
 
 Phase 0 includes:
 
-- local Solidity contracts
-- local Fastify relayer prototype
-- local Next.js POS verifier demo
+- protocol types, validators, and PaymentIntent state machine
+- in-memory Fastify API prototype
+- commerce mark-as-paid adapter surface
+- local Next.js Phase 0 console
+- unaudited EVM example contracts
 
 Phase 0 does not include:
 
@@ -34,15 +36,16 @@ Phase 0 does not include:
 - abuse monitoring
 - legal/compliance enforcement
 - audited smart contracts
+- token issuance or marketplace functionality
 
 ## Production Requirements
 
 Before production use:
 
-- complete a smart contract audit
-- use a multisig-controlled merchant vault
-- replace in-memory relayer state with persistent storage
-- enforce rate limits and replay protection at the service layer
-- add operational monitoring and alerting
+- complete independent security review
+- replace in-memory service state with persistent storage
+- enforce API authentication, rate limits, and replay protection
+- use multisig-controlled merchant receiving addresses where appropriate
+- monitor settlement proof, webhook, and mark-as-paid failures
 - obtain jurisdiction-specific legal review
-- ensure PII remains off-chain
+- keep PII off-chain and out of webhook payloads unless strictly required

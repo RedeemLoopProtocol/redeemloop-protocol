@@ -1,5 +1,4 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { Address, Hex } from "viem";
 
 export type CommerceProvider = "shopify" | "woocommerce" | "custom";
 
@@ -19,12 +18,14 @@ export interface CommerceMarkAsPaidInput {
   provider: CommerceProvider;
   orderId: string;
   paymentId: string;
-  merchantId: Hex;
-  chainId: number;
-  voucherToken: Address;
+  merchantId: string;
+  chainId?: number;
+  voucherToken: string;
+  assetId?: string;
   amount: string;
-  receiver: Address;
-  txHash?: Hex;
+  receiver: string;
+  txHash?: string;
+  intentId?: string;
   redemptionId?: string;
 }
 
@@ -68,6 +69,24 @@ export function verifyBase64HmacSha256(secret: string, rawBody: string, signatur
   if (!signature) return false;
   const expected = createHmac("sha256", secret).update(rawBody, "utf8").digest();
   const provided = Buffer.from(signature, "base64");
+  if (provided.length !== expected.length) return false;
+  return timingSafeEqual(expected, provided);
+}
+
+export function redeemLoopWebhookSignature(secret: string, timestamp: string, nonce: string, rawBody: string): string {
+  return createHmac("sha256", secret).update(`${timestamp}.${nonce}.${rawBody}`, "utf8").digest("hex");
+}
+
+export function verifyRedeemLoopWebhookSignature(
+  secret: string,
+  timestamp: string | undefined,
+  nonce: string | undefined,
+  rawBody: string,
+  signature: string | undefined,
+): boolean {
+  if (!timestamp || !nonce || !signature) return false;
+  const expected = Buffer.from(redeemLoopWebhookSignature(secret, timestamp, nonce, rawBody), "hex");
+  const provided = Buffer.from(signature, "hex");
   if (provided.length !== expected.length) return false;
   return timingSafeEqual(expected, provided);
 }
@@ -168,13 +187,15 @@ function markWooCommerceOrderAsPaid(
     status: "processing",
     meta_data: [
       { key: "_redeemloop_payment_id", value: input.paymentId },
+      { key: "_redeemloop_intent_id", value: input.intentId ?? input.paymentId },
       { key: "_redeemloop_merchant_id", value: input.merchantId },
-      { key: "_redeemloop_chain_id", value: String(input.chainId) },
+      { key: "_redeemloop_chain_id", value: input.chainId === undefined ? "" : String(input.chainId) },
       { key: "_redeemloop_voucher_token", value: input.voucherToken },
+      { key: "_redeemloop_asset_id", value: input.assetId ?? "" },
       { key: "_redeemloop_receiver", value: input.receiver },
       { key: "_redeemloop_amount", value: input.amount },
       { key: "_redeemloop_tx_hash", value: input.txHash ?? "" },
-      { key: "_redeemloop_redemption_id", value: input.redemptionId ?? "" },
+      { key: "_redeemloop_legacy_reference", value: input.redemptionId ?? "" },
     ],
   };
   const request = {
@@ -220,14 +241,16 @@ function customMarkAsPaid(input: CommerceMarkAsPaidInput, config: CommerceAdapte
       headers: ["Content-Type: application/json"],
       body: {
         paymentId: input.paymentId,
+        intentId: input.intentId ?? input.paymentId,
         orderId: input.orderId,
         merchantId: input.merchantId,
-        chainId: input.chainId,
+        chainId: input.chainId ?? null,
         voucherToken: input.voucherToken,
+        assetId: input.assetId ?? null,
         amount: input.amount,
         receiver: input.receiver,
         txHash: input.txHash ?? null,
-        redemptionId: input.redemptionId ?? null,
+        legacyReference: input.redemptionId ?? null,
       },
     },
   };

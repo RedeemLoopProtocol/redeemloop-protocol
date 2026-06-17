@@ -1,16 +1,20 @@
 {
   "name": "@redeemloop/api",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "predev": "pnpm --filter @redeemloop/core build",
     "dev": "tsx watch src/index.ts",
+    "prebuild": "pnpm --filter @redeemloop/core build",
     "build": "tsc -p tsconfig.json",
+    "pretest": "pnpm --filter @redeemloop/core build",
     "test": "vitest run",
     "lint": "tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
+    "@redeemloop/core": "workspace:*",
     "@fastify/cors": "^11.2.0",
     "fastify": "^5.2.1",
     "viem": "^2.22.17"

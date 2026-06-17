@@ -1,13 +1,20 @@
 # RedeemLoop Project Package
 
-This package contains:
+This repository contains the v0.2 Phase 0 implementation package:
 
-- Whitepaper Markdown: whitepaper/RedeemLoop_Whitepaper.md
-- Whitepaper PDF: whitepaper/RedeemLoop_Whitepaper.pdf
-- GitHub README: README.md
-- Construction document: docs/CONSTRUCTION.md
-- Codex prompt: docs/CODEX_PROMPT.md
-- Protocol spec and integration guides
-- Solidity interface scaffold
+- Bilingual GitHub README: `README.md`
+- Whitepaper Markdown/PDF/DOCX: `whitepaper/`
+- Protocol boundary: `docs/BOUNDARY.md`
+- Construction guide: `docs/CONSTRUCTION.md`
+- Protocol spec: `docs/PROTOCOL_SPEC.md`
+- API and data model: `docs/API_AND_DATA_MODEL.md`
+- Integration guide: `docs/INTEGRATION_GUIDE.md`
+- Commerce adapters guide: `docs/COMMERCE_ADAPTERS.md`
+- Core TypeScript protocol package: `packages/core`
+- Adapter interface package: `packages/adapters`
+- TypeScript SDK package: `packages/sdk`
+- API service: `services/api`
+- Local Phase 0 console: `apps/pos-verifier`
+- EVM ERC-20 voucher asset example contracts: `packages/contracts`
 
-Recommended first implementation target: Phase 0 in docs/CODEX_PROMPT.md.
+Recommended implementation target: v0.2 Phase 0 in `docs/CONSTRUCTION.md`.

@@ -4,15 +4,16 @@ Thanks for contributing to RedeemLoop.
 
 ## Scope Discipline
 
-The current public release is Phase 0. Keep changes focused on:
+The current public release is v0.2 Phase 0. Keep changes focused on:
 
-- ERC-20 FT vouchers
-- `BURN` and `COLLECT`
-- EIP-712 redemption authorization
-- POS verifier demo
-- basic relayer behavior
+- Asset Binding for existing voucher assets.
+- Voucher Tender and PaymentIntent flows.
+- Merchant receiving address / vault confirmation.
+- Settlement proof validation and idempotency.
+- Commerce mark-as-paid adapters.
+- Adapter interfaces for EVM, Bitcoin, Fractal, wallets, and indexers.
 
-Do not add NFT, marketplace, points, bridge, KYC, inventory, ERC-6909, or ERC-1155 functionality unless the roadmap phase explicitly changes.
+Do not add token launch flows, merchant token deployers, Rune etching, Ordinal inscription, NFT minting, secondary markets, token pricing engines, custody, inventory, logistics, tax, or after-sales systems to the core product.
 
 ## Local Setup
 
@@ -32,17 +33,18 @@ pnpm verify
 pnpm audit --audit-level moderate
 ```
 
-For contract-only changes:
+For EVM example contract-only changes:
 
 ```bash
 pnpm contracts:test
-pnpm --filter @redeemloop/contracts lint
+pnpm --filter @redeemloop/example-evm-erc20-voucher lint
 ```
 
 ## Pull Request Expectations
 
-- Keep the behavioral scope small.
+- Keep behavioral scope small.
 - Add tests for new behavior.
-- Update docs when commands, APIs, or contract behavior change.
+- Update docs when commands, APIs, or package behavior change.
+- Preserve the non-issuing protocol boundary.
 - Do not commit generated folders such as `node_modules`, `.next`, `dist`, `out`, `cache`, or `packages/contracts/lib`.
 - Do not put private user data, API keys, seed phrases, or production private keys in the repository.

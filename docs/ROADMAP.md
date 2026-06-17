@@ -1,85 +1,41 @@
-# Roadmap
+# RedeemLoop Roadmap
 
-This roadmap is the public product direction for RedeemLoop after the first EVM prototype.
+This roadmap is the public product direction after the v0.2 Phase 0 realignment.
 
-## Current v0.1.0 Status
-
-Implemented:
-
-- EVM ERC-20 voucher contract foundation.
-- Merchant vault collection flow.
-- Store/terminal authorization registry.
-- EIP-712 `collectWithAuthorization` and `burnWithAuthorization`.
-- Basic Fastify relayer prototype.
-- Local POS verifier demo.
-- EVM ERC-20 voucher payment button in the POS verifier.
-- Merchant EVM voucher receiving address endpoint and UI.
-- Shopify / WooCommerce mark-as-paid dry-run/live adapter endpoints.
-- HMAC-verified Shopify and WooCommerce mark-as-paid webhook endpoints.
-
-Not yet implemented:
-
-- Bitcoin Rune, Fractal Bitcoin, inscription, NFT, live commerce, mini-program, and multi-indexer adapters.
-
-## Phase 0 - EVM Commerce Voucher
+## Phase 0
 
 - EVM ERC-20 voucher payment button.
-- Merchant voucher receiving address.
-- Shopify / WooCommerce mark-as-paid webhook.
+- Merchant receiving address.
+- Shopify / WooCommerce mark-as-paid webhook and adapter surface.
+- Asset Binding, Voucher Tender, PaymentIntent, receipt confirmation, and mark-as-paid loop.
 
-Goal:
-
-```text
-Merchant checkout -> user pays/redeems with ERC-20 voucher -> merchant receives/collects voucher -> commerce platform marks order as paid.
-```
-
-## Phase 1 - Bitcoin Rune Payment Adapter
+## Phase 1
 
 - Bitcoin Rune payment adapter.
 - UniSat / Xverse wallet adapter.
 - Rune indexer adapter.
 - PSBT builder.
 
-Goal:
-
-```text
-Bitcoin Rune voucher -> wallet signing -> PSBT payment/redemption -> indexer confirmation -> merchant settlement event.
-```
-
-## Phase 2 - Fractal Bitcoin Adapters
+## Phase 2
 
 - Fractal Bitcoin Rune adapter.
 - Fractal inscription adapter.
 - Fractal indexer adapter.
 
-Goal:
-
-```text
-Fractal Bitcoin voucher assets -> wallet/indexer adapter -> payment or redemption proof -> merchant fulfillment.
-```
-
-## Phase 3 - Inscription, POS, Live Commerce, Mini Program
+## Phase 3
 
 - Inscription / NFT voucher adapter.
 - POS QR payment.
-- Live commerce short link.
+- Livestream commerce short links.
 - Mini-program SDK.
 
-Goal:
-
-```text
-Voucher redemption works across physical POS, livestream shopping links, mini-program flows, and inscription/NFT voucher formats.
-```
-
-## Phase 4 - Resilience, Merchant Operations, Global Rules
+## Phase 4
 
 - Multi-indexer failover.
-- Merchant recycling/distribution console.
+- Merchant circulation and redistribution console.
 - Global voucher rules.
-- Secondary circulation analytics.
+- Secondary transfer analytics.
 
-Goal:
+## Boundary
 
-```text
-Production-grade merchant operations with indexer redundancy, controlled redistribution, jurisdiction-aware rules, and circulation insights.
-```
+Across all phases, RedeemLoop remains a non-issuing voucher payment gateway. Asset creation, token launch tooling, Rune etching, Ordinal inscription, NFT minting, custody, token pricing, secondary markets, commerce replacement, logistics, tax, and after-sales systems stay outside the core product.

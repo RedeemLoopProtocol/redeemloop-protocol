@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RedeemLoop POS Verifier",
-  description: "Local Phase 0 POS verifier for RedeemLoop voucher redemptions.",
+  title: "RedeemLoop Phase 0 Console",
+  description: "Local Phase 0 console for Asset Binding, Voucher Tender, PaymentIntent, receipt confirmation, and mark-as-paid adapters.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -1,31 +1,44 @@
 import { describe, expect, it } from "vitest";
 
-import { createRedeemLink, shortenHash } from "../src/redeemLink";
+import { createPaymentLink, shortenHash } from "../src/redeemLink";
+import type { PaymentIntentResponse } from "../src/types";
 
-describe("redeemLink", () => {
-  it("creates a deep link without private customer data", () => {
-    const link = createRedeemLink(
-      {
-        user: "0x0000000000000000000000000000000000000abc",
-        voucherToken: "0x0000000000000000000000000000000000000def",
-        tokenId: "0",
-        amount: "1",
-        merchantId: "0x3d8c86f0107a3f98de7cf6665ed67a78535161b3f4c5d5c68b6a917c98f7202a",
-        storeId: "0x2d8c86f0107a3f98de7cf6665ed67a78535161b3f4c5d5c68b6a917c98f7202a",
-        terminalId: "0x1d8c86f0107a3f98de7cf6665ed67a78535161b3f4c5d5c68b6a917c98f7202a",
-        termsHash: "0x4d8c86f0107a3f98de7cf6665ed67a78535161b3f4c5d5c68b6a917c98f7202a",
-        redemptionMode: 1,
-        nonce: "42",
-        deadline: "1893456000",
-      },
-      31337,
-    );
+describe("paymentLink", () => {
+  it("creates a PaymentIntent deep link without private customer data", () => {
+    const intent: PaymentIntentResponse = {
+      intentId: "pi_123",
+      bindingId: "bind_123",
+      merchantId: "merchant_123",
+      storeId: "store_1",
+      channel: "checkout",
+      orderId: "order_42",
+      skuLines: [{ sku: "coffee", quantity: 1 }],
+      acceptedAssets: [
+        {
+          chainNamespace: "eip155",
+          chainId: 31337,
+          assetType: "erc20",
+          assetId: "eip155:31337/erc20:0x0000000000000000000000000000000000000def",
+          contract: "0x0000000000000000000000000000000000000def",
+          requiredAmount: "1",
+          termsHash: "terms",
+        },
+      ],
+      merchantVault: "0x0000000000000000000000000000000000000abc",
+      settlementPolicy: "collect",
+      status: "created",
+      expiresAt: "2027-01-01T00:00:00.000Z",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      updatedAt: "2026-06-17T00:00:00.000Z",
+    };
 
-    expect(link).toContain("redeemloop://redeem?");
-    expect(link).toContain("chainId=31337");
-    expect(link).toContain("amount=1");
-    expect(link).toContain("nonce=42");
-    expect(link).not.toContain("user=");
+    const link = createPaymentLink(intent);
+
+    expect(link).toContain("redeemloop://pay?");
+    expect(link).toContain("intentId=pi_123");
+    expect(link).toContain("bindingId=bind_123");
+    expect(link).toContain("orderId=order_42");
+    expect(link).not.toContain("payer");
   });
 
   it("shortens hashes for fixed-width UI", () => {

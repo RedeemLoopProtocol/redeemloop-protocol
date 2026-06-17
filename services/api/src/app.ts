@@ -1,6 +1,26 @@
 import cors from "@fastify/cors";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { randomBytes } from "node:crypto";
+import {
+  type CommerceTarget,
+  type BindingStatus,
+  type Entitlement,
+  type PaymentIntentStatus,
+  type RedeemLoopPaymentIntent,
+  type RedemptionBinding,
+  type VoucherAssetDescriptor,
+  type VoucherPaymentProof,
+  assertTransition,
+  assertValidEntitlement,
+  assertValidPaymentIntent,
+  assertValidRedemptionBinding,
+  assertValidVoucherAssetDescriptor,
+  assertValidVoucherPaymentProof,
+  canTransition,
+  markPaidIdempotencyKey,
+  proofIdempotencyKey,
+  transitionPaymentIntent,
+} from "@redeemloop/core";
 import {
   type Address,
   type Hex,
@@ -22,6 +42,7 @@ import {
   markCommerceOrderAsPaid,
   normalizeProvider,
   optionalString,
+  redeemLoopWebhookSignature as signRedeemLoopWebhook,
   requireString,
   verifyBase64HmacSha256,
 } from "./commerce.js";
@@ -53,6 +74,38 @@ interface ApiConfig {
   woocommerceConsumerKey?: string;
   woocommerceConsumerSecret?: string;
   woocommerceWebhookSecret?: string;
+}
+
+interface MerchantRecord {
+  merchantId: string;
+  name: string;
+  status: "active" | "suspended";
+  domains: Array<{ domain: string; verified: boolean; verifiedAt?: string }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface MerchantVaultRecord {
+  vaultId: string;
+  merchantId: string;
+  chainNamespace: "eip155" | "bitcoin" | "fractal";
+  chainId?: number;
+  address: string;
+  label?: string;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface WebhookEndpointRecord {
+  id: string;
+  merchantId: string;
+  url: string;
+  secret: string;
+  events: string[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface SubmitBody {
@@ -96,6 +149,15 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
   const redemptionSubmissions = new Set<string>();
   const merchantReceivers = new Map<string, MerchantReceiverRecord>();
   const commercePayments = new Map<string, CommercePaymentRecord>();
+  const merchants = new Map<string, MerchantRecord>();
+  const merchantVaults = new Map<string, MerchantVaultRecord>();
+  const entitlements = new Map<string, Entitlement>();
+  const bindings = new Map<string, RedemptionBinding>();
+  const paymentIntents = new Map<string, RedeemLoopPaymentIntent>();
+  const settlementProofs = new Map<string, VoucherPaymentProof>();
+  const proofIdempotency = new Map<string, string>();
+  const markPaidIdempotency = new Set<string>();
+  const webhookEndpoints = new Map<string, WebhookEndpointRecord>();
   const resolvedConfig: ApiConfig = {
     chainId: normalizeChainId(config.chainId ?? process.env.CHAIN_ID ?? 31337),
     rpcUrl: config.rpcUrl ?? process.env.RPC_URL,
@@ -137,6 +199,472 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     chainId: resolvedConfig.chainId,
     dryRun: resolvedConfig.dryRun,
   }));
+
+  app.post("/v1/merchants", async (request, reply) => {
+    try {
+      const body = request.body as Record<string, unknown>;
+      const now = new Date().toISOString();
+      const merchantId = optionalString(body.merchantId, "merchantId") ?? randomId("mer");
+      const merchant: MerchantRecord = {
+        merchantId,
+        name: optionalString(body.name, "name") ?? merchantId,
+        status: "active",
+        domains: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      merchants.set(merchantId, merchant);
+      return reply.code(201).send(merchant);
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.get("/v1/merchants/:merchantId", async (request, reply) => {
+    const params = request.params as { merchantId: string };
+    const merchant = merchants.get(params.merchantId);
+    if (!merchant) return reply.code(404).send({ error: "Merchant not found" });
+    return merchant;
+  });
+
+  app.post("/v1/merchants/:merchantId/domains/verify", async (request, reply) => {
+    try {
+      const params = request.params as { merchantId: string };
+      const body = request.body as Record<string, unknown>;
+      const merchant = merchants.get(params.merchantId);
+      if (!merchant) return reply.code(404).send({ error: "Merchant not found" });
+      const domain = requireString(body.domain, "domain");
+      const now = new Date().toISOString();
+      const updated: MerchantRecord = {
+        ...merchant,
+        domains: [...merchant.domains.filter((item) => item.domain !== domain), { domain, verified: true, verifiedAt: now }],
+        updatedAt: now,
+      };
+      merchants.set(updated.merchantId, updated);
+      return updated;
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.post("/v1/merchant-vaults", async (request, reply) => {
+    try {
+      const body = request.body as Record<string, unknown>;
+      const now = new Date().toISOString();
+      const chainNamespace = normalizeChainNamespace(body.chainNamespace);
+      const chainId = chainNamespace === "eip155" ? normalizeChainId(body.chainId ?? resolvedConfig.chainId) : normalizeOptionalChainId(body.chainId);
+      const address = normalizeVaultAddress(chainNamespace, requireString(body.address, "address"));
+      const vault: MerchantVaultRecord = {
+        vaultId: optionalString(body.vaultId, "vaultId") ?? randomId("vault"),
+        merchantId: requireString(body.merchantId, "merchantId"),
+        chainNamespace,
+        chainId,
+        address,
+        label: optionalString(body.label, "label"),
+        verified: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      merchantVaults.set(vault.vaultId, vault);
+
+      if (vault.chainNamespace === "eip155" && vault.chainId !== undefined) {
+        merchantReceivers.set(receiverKey(normalizeBytes32(vault.merchantId, "merchantId"), vault.chainId), {
+          merchantId: normalizeBytes32(vault.merchantId, "merchantId"),
+          chainId: vault.chainId,
+          receivingAddress: normalizeAddress(vault.address, "address"),
+          updatedAt: now,
+        });
+      }
+
+      return reply.code(201).send(vault);
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.get("/v1/merchant-vaults", async (request) => {
+    const query = request.query as { merchantId?: string };
+    return [...merchantVaults.values()].filter((vault) => !query.merchantId || vault.merchantId === query.merchantId);
+  });
+
+  app.post("/v1/merchant-vaults/:vaultId/verify-signature", async (request, reply) => {
+    try {
+      const params = request.params as { vaultId: string };
+      const body = request.body as Record<string, unknown>;
+      const vault = merchantVaults.get(params.vaultId);
+      if (!vault) return reply.code(404).send({ error: "Merchant vault not found" });
+      requireString(body.signature, "signature");
+      const updated = { ...vault, verified: true, updatedAt: new Date().toISOString() };
+      merchantVaults.set(updated.vaultId, updated);
+      return updated;
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.post("/v1/entitlements", async (request, reply) => {
+    try {
+      const body = request.body as Record<string, unknown>;
+      const entitlement: Entitlement = {
+        entitlementId: optionalString(body.entitlementId, "entitlementId") ?? randomId("ent"),
+        merchantId: requireString(body.merchantId, "merchantId"),
+        name: requireString(body.name, "name"),
+        description: optionalString(body.description, "description"),
+        quantity: normalizePositiveInteger(body.quantity ?? 1, "quantity"),
+        region: optionalString(body.region, "region"),
+        validity: body.validity as Entitlement["validity"],
+        termsHash: optionalString(body.termsHash, "termsHash") ?? randomId("terms"),
+        termsUri: optionalString(body.termsUri, "termsUri"),
+      };
+      assertValidEntitlement(entitlement);
+      entitlements.set(entitlement.entitlementId, entitlement);
+      return reply.code(201).send(entitlement);
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.get("/v1/entitlements/:entitlementId", async (request, reply) => {
+    const params = request.params as { entitlementId: string };
+    const entitlement = entitlements.get(params.entitlementId);
+    if (!entitlement) return reply.code(404).send({ error: "Entitlement not found" });
+    return entitlement;
+  });
+
+  app.patch("/v1/entitlements/:entitlementId", async (request, reply) => {
+    try {
+      const params = request.params as { entitlementId: string };
+      const existing = entitlements.get(params.entitlementId);
+      if (!existing) return reply.code(404).send({ error: "Entitlement not found" });
+      const patch = request.body as Partial<Entitlement>;
+      const updated: Entitlement = { ...existing, ...patch, entitlementId: existing.entitlementId, merchantId: existing.merchantId };
+      assertValidEntitlement(updated);
+      entitlements.set(updated.entitlementId, updated);
+      return updated;
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.post("/v1/bindings", async (request, reply) => {
+    try {
+      const body = request.body as Record<string, unknown>;
+      const entitlementId = requireString(body.entitlementId, "entitlementId");
+      if (!entitlements.has(entitlementId)) return reply.code(404).send({ error: "Entitlement not found" });
+      const now = new Date().toISOString();
+      const acceptedAssets = normalizeAssetList(body.acceptedAssets);
+      const merchantVaultMap = normalizeMerchantVaultMap(body.merchantVaults, acceptedAssets, merchantVaults);
+      const binding: RedemptionBinding = {
+        bindingId: optionalString(body.bindingId, "bindingId") ?? randomId("bind"),
+        merchantId: requireString(body.merchantId, "merchantId"),
+        entitlementId,
+        acceptedAssets,
+        merchantVaults: merchantVaultMap,
+        settlementPolicy: normalizeSettlementPolicy(body.settlementPolicy ?? "collect"),
+        commerceTargets: normalizeCommerceTargets(body.commerceTargets),
+        status: normalizeBindingStatus(body.status ?? "active"),
+        termsHash: optionalString(body.termsHash, "termsHash") ?? acceptedAssets[0]?.termsHash ?? entitlementId,
+        createdAt: now,
+        updatedAt: now,
+      };
+      assertValidRedemptionBinding(binding);
+      bindings.set(binding.bindingId, binding);
+      return reply.code(201).send(binding);
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.get("/v1/bindings/:bindingId", async (request, reply) => {
+    const params = request.params as { bindingId: string };
+    const binding = bindings.get(params.bindingId);
+    if (!binding) return reply.code(404).send({ error: "Binding not found" });
+    return binding;
+  });
+
+  app.get("/v1/bindings", async (request) => {
+    const query = request.query as { merchantId?: string; sku?: string };
+    return [...bindings.values()].filter((binding) => {
+      if (query.merchantId && binding.merchantId !== query.merchantId) return false;
+      if (query.sku && !binding.commerceTargets.some((target) => target.sku === query.sku)) return false;
+      return true;
+    });
+  });
+
+  app.patch("/v1/bindings/:bindingId", async (request, reply) => {
+    try {
+      const params = request.params as { bindingId: string };
+      const existing = bindings.get(params.bindingId);
+      if (!existing) return reply.code(404).send({ error: "Binding not found" });
+      const patch = request.body as Partial<RedemptionBinding>;
+      const updated: RedemptionBinding = {
+        ...existing,
+        ...patch,
+        bindingId: existing.bindingId,
+        merchantId: existing.merchantId,
+        entitlementId: existing.entitlementId,
+        updatedAt: new Date().toISOString(),
+      };
+      assertValidRedemptionBinding(updated);
+      bindings.set(updated.bindingId, updated);
+      return updated;
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.post("/v1/bindings/:bindingId/pause", async (request, reply) => {
+    return updateBindingStatus(request.params as { bindingId: string }, "paused", bindings, reply);
+  });
+
+  app.post("/v1/bindings/:bindingId/activate", async (request, reply) => {
+    return updateBindingStatus(request.params as { bindingId: string }, "active", bindings, reply);
+  });
+
+  app.post("/v1/payment-intents", async (request, reply) => {
+    try {
+      const body = request.body as Record<string, unknown>;
+      const bindingId = requireString(body.bindingId, "bindingId");
+      const binding = bindings.get(bindingId);
+      if (!binding) return reply.code(404).send({ error: "Binding not found" });
+      if (binding.status !== "active") return reply.code(409).send({ error: "Binding is not active" });
+      const now = new Date();
+      const selectedAsset = optionalString(body.assetId, "assetId")
+        ? findAcceptedAsset(binding, requireString(body.assetId, "assetId"))
+        : undefined;
+      const primaryAsset = selectedAsset ?? binding.acceptedAssets[0];
+      const intent: RedeemLoopPaymentIntent = {
+        intentId: optionalString(body.intentId, "intentId") ?? randomId("pi"),
+        bindingId,
+        merchantId: binding.merchantId,
+        storeId: optionalString(body.storeId, "storeId") ?? binding.commerceTargets[0]?.storeId,
+        channel: normalizePaymentChannel(body.channel ?? "checkout"),
+        orderId: requireString(body.orderId, "orderId"),
+        skuLines: normalizeSkuLines(body.skuLines, binding.commerceTargets),
+        acceptedAssets: binding.acceptedAssets,
+        selectedAsset,
+        payerAddress: optionalString(body.payerAddress, "payerAddress"),
+        merchantVault: findMerchantVaultAddress(binding, primaryAsset),
+        settlementPolicy: binding.settlementPolicy,
+        status: "created",
+        expiresAt: optionalString(body.expiresAt, "expiresAt") ?? new Date(now.getTime() + 15 * 60 * 1000).toISOString(),
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      assertValidPaymentIntent(intent);
+      paymentIntents.set(intent.intentId, intent);
+      return reply.code(201).send(intent);
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.get("/v1/payment-intents/:intentId", async (request, reply) => {
+    const params = request.params as { intentId: string };
+    const intent = paymentIntents.get(params.intentId);
+    if (!intent) return reply.code(404).send({ error: "PaymentIntent not found" });
+    return intent;
+  });
+
+  app.post("/v1/payment-intents/:intentId/connect-wallet", async (request, reply) => {
+    try {
+      const body = request.body as Record<string, unknown>;
+      const result = updatePaymentIntent(request.params as { intentId: string }, paymentIntents, "wallet_connected", {
+        payerAddress: requireString(body.payerAddress, "payerAddress"),
+      });
+      if (!result) return reply.code(404).send({ error: "PaymentIntent not found" });
+      return result;
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.post("/v1/payment-intents/:intentId/select-asset", async (request, reply) => {
+    try {
+      const params = request.params as { intentId: string };
+      const body = request.body as Record<string, unknown>;
+      const intent = paymentIntents.get(params.intentId);
+      if (!intent) return reply.code(404).send({ error: "PaymentIntent not found" });
+      const asset = findAcceptedAssetByInput(intent.acceptedAssets, body);
+      const updated = updatePaymentIntent(params, paymentIntents, "asset_selected", {
+        selectedAsset: asset,
+        merchantVault: findMerchantVaultAddress(bindings.get(intent.bindingId), asset),
+      });
+      return updated;
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.post("/v1/payment-intents/:intentId/transfer-requested", async (request, reply) => {
+    try {
+      const params = request.params as { intentId: string };
+      const body = request.body as Record<string, unknown>;
+      const intent = paymentIntents.get(params.intentId);
+      if (!intent) return reply.code(404).send({ error: "PaymentIntent not found" });
+      const asset = optionalString(body.assetId, "assetId") ? findAcceptedAsset(intent, requireString(body.assetId, "assetId")) : intent.selectedAsset ?? intent.acceptedAssets[0];
+      const next = updatePaymentIntent(params, paymentIntents, "transfer_requested", {
+        selectedAsset: asset,
+        payerAddress: optionalString(body.payerAddress, "payerAddress") ?? intent.payerAddress,
+        merchantVault: findMerchantVaultAddress(bindings.get(intent.bindingId), asset),
+      });
+      if (!next) return reply.code(404).send({ error: "PaymentIntent not found" });
+      return {
+        ...next,
+        transfer: {
+          to: next.merchantVault,
+          asset,
+          amount: asset.requiredAmount,
+          settlementPolicy: next.settlementPolicy,
+        },
+      };
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.post("/v1/payment-intents/:intentId/broadcasted", async (request, reply) => {
+    try {
+      const body = request.body as Record<string, unknown>;
+      requireString(body.txid, "txid");
+      const updated = updatePaymentIntent(request.params as { intentId: string }, paymentIntents, "broadcasted");
+      if (!updated) return reply.code(404).send({ error: "PaymentIntent not found" });
+      return { ...updated, txid: body.txid };
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.post("/v1/payment-intents/:intentId/cancel", async (request, reply) => {
+    try {
+      const updated = updatePaymentIntent(request.params as { intentId: string }, paymentIntents, "cancelled");
+      if (!updated) return reply.code(404).send({ error: "PaymentIntent not found" });
+      return updated;
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.post("/v1/settlement/proofs", async (request, reply) => {
+    try {
+      const body = request.body as Partial<VoucherPaymentProof>;
+      const intentId = requireString(body.intentId, "intentId");
+      const intent = paymentIntents.get(intentId);
+      if (!intent) return reply.code(404).send({ error: "PaymentIntent not found" });
+      const asset = intent.selectedAsset ?? intent.acceptedAssets[0];
+      const proof: VoucherPaymentProof = {
+        proofId: optionalString(body.proofId, "proofId") ?? randomId("proof"),
+        intentId,
+        chainNamespace: body.chainNamespace ?? asset.chainNamespace,
+        chainId: body.chainId ?? asset.chainId,
+        txid: requireString(body.txid, "txid"),
+        blockNumber: body.blockNumber,
+        blockHash: body.blockHash,
+        confirmations: normalizeNonNegativeInteger(body.confirmations ?? 0, "confirmations"),
+        from: requireString(body.from, "from"),
+        to: requireString(body.to ?? intent.merchantVault, "to"),
+        assetType: body.assetType ?? asset.assetType,
+        assetId: body.assetId ?? asset.assetId,
+        contract: body.contract ?? asset.contract,
+        tokenId: body.tokenId ?? asset.tokenId,
+        amount: body.amount ?? asset.requiredAmount,
+        logIndex: body.logIndex,
+        outputIndex: body.outputIndex,
+        status: body.status ?? "seen",
+        rawProof: body.rawProof,
+      };
+      assertValidVoucherPaymentProof(proof, intent);
+      const idempotencyKey = proofIdempotencyKey(proof);
+      const existingProofId = proofIdempotency.get(idempotencyKey);
+      if (existingProofId) {
+        return { ...settlementProofs.get(existingProofId), duplicate: true };
+      }
+      settlementProofs.set(proof.proofId, proof);
+      proofIdempotency.set(idempotencyKey, proof.proofId);
+
+      const nextIntent = advanceIntentFromProof(intent, proof);
+      paymentIntents.set(nextIntent.intentId, nextIntent);
+      const commerce = proof.status === "confirmed" || proof.status === "finalized"
+        ? await markIntentCommercePaid(nextIntent, proof, bindings.get(nextIntent.bindingId), resolvedConfig, markPaidIdempotency)
+        : undefined;
+
+      return reply.code(201).send({
+        ...proof,
+        paymentIntent: paymentIntents.get(nextIntent.intentId),
+        commerce,
+      });
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.get("/v1/settlement/proofs/:proofId", async (request, reply) => {
+    const params = request.params as { proofId: string };
+    const proof = settlementProofs.get(params.proofId);
+    if (!proof) return reply.code(404).send({ error: "Settlement proof not found" });
+    return proof;
+  });
+
+  app.post("/v1/settlement/recheck/:intentId", async (request, reply) => {
+    const params = request.params as { intentId: string };
+    const intent = paymentIntents.get(params.intentId);
+    if (!intent) return reply.code(404).send({ error: "PaymentIntent not found" });
+    return {
+      intentId: intent.intentId,
+      status: intent.status,
+      proofs: [...settlementProofs.values()].filter((proof) => proof.intentId === intent.intentId),
+    };
+  });
+
+  app.post("/v1/webhook-endpoints", async (request, reply) => {
+    try {
+      const body = request.body as Record<string, unknown>;
+      const now = new Date().toISOString();
+      const endpoint: WebhookEndpointRecord = {
+        id: optionalString(body.id, "id") ?? randomId("wh"),
+        merchantId: requireString(body.merchantId, "merchantId"),
+        url: requireString(body.url, "url"),
+        secret: optionalString(body.secret, "secret") ?? randomBytes(24).toString("hex"),
+        events: Array.isArray(body.events) ? body.events.map((event) => requireString(event, "events[]")) : ["payment_intent.paid"],
+        active: body.active !== false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      webhookEndpoints.set(endpoint.id, endpoint);
+      return reply.code(201).send(redactWebhookSecret(endpoint));
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.get("/v1/webhook-endpoints", async (request) => {
+    const query = request.query as { merchantId?: string };
+    return [...webhookEndpoints.values()]
+      .filter((endpoint) => !query.merchantId || endpoint.merchantId === query.merchantId)
+      .map(redactWebhookSecret);
+  });
+
+  app.post("/v1/webhook-endpoints/:id/test", async (request, reply) => {
+    const params = request.params as { id: string };
+    const endpoint = webhookEndpoints.get(params.id);
+    if (!endpoint) return reply.code(404).send({ error: "Webhook endpoint not found" });
+    const body = JSON.stringify({ type: "payment_intent.paid", endpointId: endpoint.id, test: true });
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const nonce = randomBytes(8).toString("hex");
+    return {
+      endpoint: redactWebhookSecret(endpoint),
+      request: {
+        method: "POST",
+        url: endpoint.url,
+        headers: {
+          "X-RedeemLoop-Timestamp": timestamp,
+          "X-RedeemLoop-Nonce": nonce,
+          "X-RedeemLoop-Signature": signRedeemLoopWebhook(endpoint.secret, timestamp, nonce, body),
+        },
+        body: JSON.parse(body),
+      },
+    };
+  });
 
   app.post("/v1/merchants/:merchantId/receiving-address", async (request, reply) => {
     try {
@@ -403,6 +931,244 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
   });
 
   return app;
+}
+
+function normalizeChainNamespace(value: unknown): "eip155" | "bitcoin" | "fractal" {
+  if (value === "eip155" || value === "bitcoin" || value === "fractal") return value;
+  throw new Error("chainNamespace must be eip155, bitcoin, or fractal");
+}
+
+function normalizeOptionalChainId(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  return normalizeChainId(value);
+}
+
+function normalizeVaultAddress(chainNamespace: "eip155" | "bitcoin" | "fractal", address: string): string {
+  if (chainNamespace === "eip155") return normalizeAddress(address, "address");
+  if (!address.trim()) throw new Error("address is required");
+  return address.trim();
+}
+
+function normalizeAssetList(value: unknown): VoucherAssetDescriptor[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("acceptedAssets must contain at least one voucher asset");
+  }
+  return value.map((item, index) => {
+    const asset = item as VoucherAssetDescriptor;
+    assertValidVoucherAssetDescriptor(asset);
+    if (!asset.assetId) throw new Error(`acceptedAssets[${index}].assetId is required`);
+    return asset;
+  });
+}
+
+function normalizeMerchantVaultMap(
+  value: unknown,
+  acceptedAssets: VoucherAssetDescriptor[],
+  vaultRecords: Map<string, MerchantVaultRecord>,
+): Record<string, string> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const map = Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, vault]) => [key, requireString(vault, `merchantVaults.${key}`)]),
+    );
+    if (Object.keys(map).length > 0) return map;
+  }
+
+  const derived: Record<string, string> = {};
+  for (const asset of acceptedAssets) {
+    const key = vaultKeyForAsset(asset);
+    const vault = [...vaultRecords.values()].find(
+      (record) => record.chainNamespace === asset.chainNamespace && (asset.chainNamespace !== "eip155" || record.chainId === asset.chainId),
+    );
+    if (vault) derived[key] = vault.address;
+  }
+  if (Object.keys(derived).length > 0) return derived;
+  throw new Error("merchantVaults must contain at least one receiving address");
+}
+
+function normalizeSettlementPolicy(value: unknown): "collect" | "burn" | "escrow" {
+  if (value === "collect" || value === "burn" || value === "escrow") return value;
+  throw new Error("settlementPolicy must be collect, burn, or escrow");
+}
+
+function normalizeBindingStatus(value: unknown): BindingStatus {
+  if (value === "draft" || value === "active" || value === "paused" || value === "archived") return value;
+  throw new Error("status must be draft, active, paused, or archived");
+}
+
+function normalizeCommerceTargets(value: unknown): CommerceTarget[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("commerceTargets must contain at least one commerce target");
+  }
+  return value.map((target) => target as CommerceTarget);
+}
+
+function normalizePaymentChannel(value: unknown): RedeemLoopPaymentIntent["channel"] {
+  if (value === "website" || value === "checkout" || value === "pos" || value === "miniapp" || value === "livestream" || value === "ad") {
+    return value;
+  }
+  throw new Error("channel must be website, checkout, pos, miniapp, livestream, or ad");
+}
+
+function normalizeSkuLines(value: unknown, commerceTargets: CommerceTarget[]): RedeemLoopPaymentIntent["skuLines"] {
+  if (Array.isArray(value) && value.length > 0) {
+    return value.map((item) => {
+      const line = item as Record<string, unknown>;
+      return {
+        sku: requireString(line.sku, "skuLines[].sku"),
+        quantity: normalizePositiveInteger(line.quantity ?? 1, "skuLines[].quantity"),
+      };
+    });
+  }
+  const sku = commerceTargets.find((target) => target.sku)?.sku ?? commerceTargets[0]?.productId ?? "voucher-tender";
+  return [{ sku, quantity: 1 }];
+}
+
+function normalizePositiveInteger(value: unknown, fieldName: string): number {
+  const numberValue = typeof value === "string" ? Number(value) : value;
+  if (!Number.isSafeInteger(numberValue) || Number(numberValue) <= 0) {
+    throw new Error(`${fieldName} must be a positive integer`);
+  }
+  return Number(numberValue);
+}
+
+function normalizeNonNegativeInteger(value: unknown, fieldName: string): number {
+  const numberValue = typeof value === "string" ? Number(value) : value;
+  if (!Number.isSafeInteger(numberValue) || Number(numberValue) < 0) {
+    throw new Error(`${fieldName} must be a non-negative integer`);
+  }
+  return Number(numberValue);
+}
+
+function updateBindingStatus(
+  params: { bindingId: string },
+  status: BindingStatus,
+  bindings: Map<string, RedemptionBinding>,
+  reply: FastifyReply,
+) {
+  const binding = bindings.get(params.bindingId);
+  if (!binding) return reply.code(404).send({ error: "Binding not found" });
+  const updated = { ...binding, status, updatedAt: new Date().toISOString() };
+  bindings.set(updated.bindingId, updated);
+  return updated;
+}
+
+function updatePaymentIntent(
+  params: { intentId: string },
+  paymentIntents: Map<string, RedeemLoopPaymentIntent>,
+  status: PaymentIntentStatus,
+  patch: Partial<RedeemLoopPaymentIntent> = {},
+): RedeemLoopPaymentIntent | undefined {
+  const intent = paymentIntents.get(params.intentId);
+  if (!intent) return undefined;
+  const transitioned = intent.status === status ? { ...intent, updatedAt: new Date().toISOString() } : transitionPaymentIntent(intent, status);
+  const updated = {
+    ...transitioned,
+    ...patch,
+    intentId: intent.intentId,
+    bindingId: intent.bindingId,
+    merchantId: intent.merchantId,
+    status,
+  };
+  assertValidPaymentIntent(updated);
+  paymentIntents.set(updated.intentId, updated);
+  return updated;
+}
+
+function findAcceptedAsset(binding: RedemptionBinding | RedeemLoopPaymentIntent, assetId: string): VoucherAssetDescriptor {
+  const asset = binding.acceptedAssets.find((candidate) => candidate.assetId === assetId);
+  if (!asset) throw new Error("assetId is not accepted by this binding");
+  return asset;
+}
+
+function findAcceptedAssetByInput(acceptedAssets: VoucherAssetDescriptor[], body: Record<string, unknown>): VoucherAssetDescriptor {
+  const assetId = requireString(body.assetId, "assetId");
+  const asset = acceptedAssets.find((candidate) => candidate.assetId === assetId);
+  if (!asset) throw new Error("assetId is not accepted by this PaymentIntent");
+  return asset;
+}
+
+function findMerchantVaultAddress(binding: RedemptionBinding | undefined, asset: VoucherAssetDescriptor): string {
+  if (!binding) throw new Error("Binding not found");
+  const keys = [vaultKeyForAsset(asset), asset.chainNamespace, asset.assetId].filter(Boolean);
+  for (const key of keys) {
+    const vault = binding.merchantVaults[key];
+    if (vault) return vault;
+  }
+  throw new Error("No merchant vault configured for selected asset");
+}
+
+function vaultKeyForAsset(asset: VoucherAssetDescriptor): string {
+  if (asset.chainNamespace === "eip155") return `${asset.chainNamespace}:${asset.chainId}`;
+  return asset.chainNamespace;
+}
+
+function advanceIntentFromProof(intent: RedeemLoopPaymentIntent, proof: VoucherPaymentProof): RedeemLoopPaymentIntent {
+  if (proof.status === "failed") return moveIntentTo(intent, "failed");
+  if (proof.status === "seen") return moveIntentTo(intent, "seen");
+  return moveIntentTo(moveIntentTo(moveIntentTo(intent, "seen"), "confirmed"), "paid");
+}
+
+function moveIntentTo(intent: RedeemLoopPaymentIntent, status: PaymentIntentStatus): RedeemLoopPaymentIntent {
+  if (intent.status === status) return intent;
+  if (canTransition(intent.status, status)) return transitionPaymentIntent(intent, status);
+  if (status === "seen" && (intent.status === "created" || intent.status === "wallet_connected" || intent.status === "asset_selected")) {
+    return moveIntentTo(transitionPaymentIntent(intent, "transfer_requested"), "seen");
+  }
+  if (status === "confirmed") return moveIntentTo(moveIntentTo(intent, "seen"), "confirmed");
+  if (status === "paid") return moveIntentTo(moveIntentTo(intent, "confirmed"), "paid");
+  assertTransition(intent.status, status);
+  return intent;
+}
+
+async function markIntentCommercePaid(
+  intent: RedeemLoopPaymentIntent,
+  proof: VoucherPaymentProof,
+  binding: RedemptionBinding | undefined,
+  config: ApiConfig,
+  idempotency: Set<string>,
+) {
+  const target = binding?.commerceTargets.find((candidate) => candidate.storeId === intent.storeId) ?? binding?.commerceTargets[0];
+  const platform = commerceProviderForTarget(target);
+  const storeId = target?.storeId ?? intent.storeId ?? "default";
+  const idempotencyKey = markPaidIdempotencyKey({ platform, storeId, orderId: intent.orderId, intentId: intent.intentId });
+  if (idempotency.has(idempotencyKey)) {
+    return { duplicate: true, idempotencyKey };
+  }
+
+  const result = await markCommerceOrderAsPaid(
+    {
+      provider: platform,
+      orderId: intent.orderId,
+      paymentId: intent.intentId,
+      intentId: intent.intentId,
+      merchantId: intent.merchantId,
+      chainId: proof.chainId,
+      voucherToken: proof.contract ?? proof.assetId,
+      assetId: proof.assetId,
+      amount: proof.amount,
+      receiver: proof.to,
+      txHash: proof.txid,
+    },
+    commerceAdapterConfig(config),
+  );
+  idempotency.add(idempotencyKey);
+  return { ...result, idempotencyKey };
+}
+
+function commerceProviderForTarget(target: CommerceTarget | undefined): CommerceProvider {
+  if (target?.platform === "shopify" || target?.platform === "woocommerce" || target?.platform === "custom") return target.platform;
+  return "custom";
+}
+
+function redactWebhookSecret(endpoint: WebhookEndpointRecord) {
+  return {
+    ...endpoint,
+    secret: "<redacted>",
+  };
+}
+
+function randomId(prefix: string): string {
+  return `${prefix}_${randomBytes(12).toString("hex")}`;
 }
 
 function createAuthorization(input: RedemptionIntentInput): RedeemAuthorizationJson {

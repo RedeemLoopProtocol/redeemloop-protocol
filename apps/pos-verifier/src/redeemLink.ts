@@ -1,16 +1,13 @@
-import type { RedeemAuthorizationJson } from "./types";
+import type { PaymentIntentResponse } from "./types";
 
-export function createRedeemLink(authorization: RedeemAuthorizationJson, chainId: number): string {
+export function createPaymentLink(intent: PaymentIntentResponse): string {
   const params = new URLSearchParams({
-    chainId: String(chainId),
-    token: authorization.voucherToken,
-    amount: authorization.amount,
-    storeId: authorization.storeId,
-    terminalId: authorization.terminalId,
-    nonce: authorization.nonce,
+    intentId: intent.intentId,
+    bindingId: intent.bindingId,
+    orderId: intent.orderId,
   });
 
-  return `redeemloop://redeem?${params.toString()}`;
+  return `redeemloop://pay?${params.toString()}`;
 }
 
 export function shortenHash(value: string, visible = 6): string {

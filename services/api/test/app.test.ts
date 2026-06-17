@@ -13,6 +13,203 @@ const operator = getAddress("0x0000000000000000000000000000000000000abc");
 const token = getAddress("0x0000000000000000000000000000000000000def");
 
 describe("RedeemLoop API relayer prototype", () => {
+  it("runs the v0.2 Asset Binding, PaymentIntent, receipt confirmation, and mark-as-paid flow", async () => {
+    const app = await createApp({
+      chainId: 31337,
+      dryRun: true,
+      woocommerceStoreUrl: "https://merchant.example",
+    });
+
+    const merchantResponse = await app.inject({
+      method: "POST",
+      url: "/v1/merchants",
+      payload: {
+        merchantId: "merchant_cafe",
+        name: "Merchant Cafe",
+      },
+    });
+    expect(merchantResponse.statusCode).toBe(201);
+
+    const vaultResponse = await app.inject({
+      method: "POST",
+      url: "/v1/merchant-vaults",
+      payload: {
+        vaultId: "vault_base",
+        merchantId: "merchant_cafe",
+        chainNamespace: "eip155",
+        chainId: 31337,
+        address: operator,
+      },
+    });
+    expect(vaultResponse.statusCode).toBe(201);
+
+    const entitlementResponse = await app.inject({
+      method: "POST",
+      url: "/v1/entitlements",
+      payload: {
+        entitlementId: "ent_coffee",
+        merchantId: "merchant_cafe",
+        name: "Coffee pickup",
+        quantity: 1,
+        termsHash: "coffee-terms",
+      },
+    });
+    expect(entitlementResponse.statusCode).toBe(201);
+
+    const bindingResponse = await app.inject({
+      method: "POST",
+      url: "/v1/bindings",
+      payload: {
+        bindingId: "bind_coffee",
+        merchantId: "merchant_cafe",
+        entitlementId: "ent_coffee",
+        acceptedAssets: [
+          {
+            chainNamespace: "eip155",
+            chainId: 31337,
+            assetType: "erc20",
+            assetId: `eip155:31337/erc20:${token}`,
+            contract: token,
+            requiredAmount: "1",
+            termsHash: "coffee-terms",
+          },
+        ],
+        merchantVaults: {
+          "eip155:31337": operator,
+        },
+        settlementPolicy: "collect",
+        commerceTargets: [
+          {
+            platform: "woocommerce",
+            storeId: "woo-store",
+            sku: "coffee-cup",
+          },
+        ],
+        status: "active",
+        termsHash: "coffee-terms",
+      },
+    });
+    expect(bindingResponse.statusCode).toBe(201);
+
+    const intentResponse = await app.inject({
+      method: "POST",
+      url: "/v1/payment-intents",
+      payload: {
+        bindingId: "bind_coffee",
+        orderId: "42",
+        channel: "checkout",
+        skuLines: [{ sku: "coffee-cup", quantity: 1 }],
+      },
+    });
+    expect(intentResponse.statusCode).toBe(201);
+    expect(intentResponse.json()).toMatchObject({
+      intentId: expect.stringMatching(/^pi_/),
+      bindingId: "bind_coffee",
+      merchantId: "merchant_cafe",
+      status: "created",
+      merchantVault: operator,
+      settlementPolicy: "collect",
+    });
+    const intentId = intentResponse.json().intentId as string;
+
+    const transferResponse = await app.inject({
+      method: "POST",
+      url: `/v1/payment-intents/${intentId}/transfer-requested`,
+      payload: {
+        payerAddress: user.address,
+      },
+    });
+    expect(transferResponse.statusCode).toBe(200);
+    expect(transferResponse.json()).toMatchObject({
+      status: "transfer_requested",
+      transfer: {
+        to: operator,
+        amount: "1",
+      },
+    });
+
+    const proofResponse = await app.inject({
+      method: "POST",
+      url: "/v1/settlement/proofs",
+      payload: {
+        intentId,
+        txid: "0x1234",
+        blockNumber: 12,
+        confirmations: 3,
+        from: user.address,
+        to: operator,
+        status: "confirmed",
+      },
+    });
+    expect(proofResponse.statusCode).toBe(201);
+    expect(proofResponse.json()).toMatchObject({
+      status: "confirmed",
+      paymentIntent: {
+        status: "paid",
+      },
+      commerce: {
+        provider: "woocommerce",
+        dryRun: true,
+        markedPaid: false,
+      },
+    });
+    expect(proofResponse.json().commerce.request.url).toBe("https://merchant.example/wp-json/wc/v3/orders/42");
+
+    const duplicateProofResponse = await app.inject({
+      method: "POST",
+      url: "/v1/settlement/proofs",
+      payload: {
+        intentId,
+        txid: "0x1234",
+        confirmations: 3,
+        from: user.address,
+        to: operator,
+        status: "confirmed",
+      },
+    });
+    expect(duplicateProofResponse.statusCode).toBe(200);
+    expect(duplicateProofResponse.json()).toMatchObject({
+      duplicate: true,
+    });
+
+    await app.close();
+  });
+
+  it("creates signed v0.2 webhook endpoint test requests", async () => {
+    const app = await createApp({ chainId: 31337, dryRun: true });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/webhook-endpoints",
+      payload: {
+        id: "wh_test",
+        merchantId: "merchant_cafe",
+        url: "https://merchant.example/redeemloop",
+        secret: "webhook-secret",
+      },
+    });
+    expect(createResponse.statusCode).toBe(201);
+    expect(createResponse.json()).toMatchObject({
+      id: "wh_test",
+      secret: "<redacted>",
+    });
+
+    const testResponse = await app.inject({
+      method: "POST",
+      url: "/v1/webhook-endpoints/wh_test/test",
+    });
+    expect(testResponse.statusCode).toBe(200);
+    expect(testResponse.json().request.headers).toEqual(
+      expect.objectContaining({
+        "X-RedeemLoop-Timestamp": expect.any(String),
+        "X-RedeemLoop-Nonce": expect.any(String),
+        "X-RedeemLoop-Signature": expect.stringMatching(/^[0-9a-f]{64}$/),
+      }),
+    );
+
+    await app.close();
+  });
+
   it("creates an intent, verifies the EIP-712 signature, and dry-runs submission", async () => {
     const app = await createApp({ chainId: 31337, dryRun: true });
 

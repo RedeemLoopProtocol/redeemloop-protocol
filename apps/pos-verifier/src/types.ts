@@ -1,60 +1,94 @@
-import type { Address, Hex } from "viem";
+import type { Address } from "viem";
 
-export type RedemptionModeValue = 0 | 1;
-export type RedemptionModeName = "BURN" | "COLLECT";
 export type CommerceProvider = "shopify" | "woocommerce" | "custom";
+export type ChainNamespace = "eip155" | "bitcoin" | "fractal";
+export type AssetType = "erc20" | "erc6909" | "erc1155" | "erc721" | "rune" | "inscription" | "brc20_optional";
 
-export interface RedeemAuthorizationJson {
-  user: Address;
-  voucherToken: Address;
-  tokenId: string;
-  amount: string;
-  merchantId: Hex;
-  storeId: Hex;
-  terminalId: Hex;
-  termsHash: Hex;
-  redemptionMode: RedemptionModeValue;
-  nonce: string;
-  deadline: string;
+export interface VoucherAssetDescriptor {
+  chainNamespace: ChainNamespace;
+  chainId?: number;
+  assetType: AssetType;
+  assetId: string;
+  contract?: Address;
+  tokenId?: string;
+  requiredAmount: string;
+  termsHash: string;
 }
 
-export interface RedemptionIntentResponse {
-  authorization: RedeemAuthorizationJson;
-  typedData: {
-    domain: {
-      name: string;
-      version: string;
-      chainId: number;
-      verifyingContract: Address;
-    };
-    types: {
-      RedeemAuthorization: readonly { name: string; type: string }[];
-    };
-    primaryType: "RedeemAuthorization";
-    message: RedeemAuthorizationJson;
-  };
-  expiresAt: string;
+export interface BindingResponse {
+  bindingId: string;
+  merchantId: string;
+  entitlementId: string;
+  acceptedAssets: VoucherAssetDescriptor[];
+  merchantVaults: Record<string, string>;
+  settlementPolicy: "collect" | "burn" | "escrow";
+  commerceTargets: Array<{
+    platform: CommerceProvider | "pos" | "miniapp" | "livestream";
+    storeId: string;
+    sku?: string;
+  }>;
+  status: "draft" | "active" | "paused" | "archived";
+  termsHash: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface CommercePaymentResponse {
-  paymentId: string;
-  provider: CommerceProvider;
-  merchantId: Hex;
-  chainId: number;
+export interface PaymentIntentResponse {
+  intentId: string;
+  bindingId: string;
+  merchantId: string;
+  storeId?: string;
+  channel: "website" | "checkout" | "pos" | "miniapp" | "livestream" | "ad";
   orderId: string;
-  voucherToken: Address;
+  skuLines: Array<{ sku: string; quantity: number }>;
+  acceptedAssets: VoucherAssetDescriptor[];
+  selectedAsset?: VoucherAssetDescriptor;
+  payerAddress?: string;
+  merchantVault: string;
+  settlementPolicy: "collect" | "burn" | "escrow";
+  status:
+    | "created"
+    | "wallet_connected"
+    | "asset_selected"
+    | "transfer_requested"
+    | "broadcasted"
+    | "seen"
+    | "confirmed"
+    | "paid"
+    | "expired"
+    | "failed"
+    | "cancelled"
+    | "manual_review";
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+  transfer?: {
+    to: string;
+    asset: VoucherAssetDescriptor;
+    amount: string;
+    settlementPolicy: "collect" | "burn" | "escrow";
+  };
+}
+
+export interface SettlementProofResponse {
+  proofId: string;
+  intentId: string;
+  txid: string;
+  confirmations: number;
+  from: string;
+  to: string;
+  assetType: AssetType;
+  assetId: string;
   amount: string;
-  receiver: Address;
-  merchantReceiver?: Address;
-  status: "intent_created" | "verified" | "paid";
-  dryRun: boolean;
-  txHash?: Hex;
-  redemptionId?: string;
+  status: "seen" | "confirmed" | "finalized" | "failed";
+  duplicate?: boolean;
+  paymentIntent?: PaymentIntentResponse;
   commerce?: {
     provider: CommerceProvider;
     orderId: string;
     markedPaid: boolean;
     dryRun: boolean;
+    idempotencyKey?: string;
     request: {
       method: "POST" | "PUT";
       url: string;

@@ -1,74 +1,67 @@
-# CODEX PROMPT - RedeemLoop Phase 0
+# Codex Prompt - RedeemLoop v0.2
 
-You are implementing RedeemLoop Protocol Phase 0.
+You are implementing RedeemLoop Protocol v0.2.
 
-Build only the first closed loop:
+RedeemLoop is NOT a token issuance platform. Do not implement token issuance, contract deployment, rune etching, ordinal inscription, NFT minting, asset custody, marketplace, token pricing engine, logistics, inventory, tax, or after-sales systems.
+
+RedeemLoop is a multi-chain voucher payment and settlement layer. Merchants bring their own voucher assets. The protocol binds those assets to product/service entitlements, verifies customer ownership, helps customers transfer the required asset to the merchant vault, verifies settlement, and notifies the merchant commerce system to mark the order as paid.
+
+## Required architecture
+
+Implement a pnpm monorepo:
 
 ```text
-ERC20Voucher + MerchantVault + StoreTerminalRegistry + collectWithAuthorization + POS Verifier demo + basic API relayer
+packages/core
+packages/sdk
+packages/react
+packages/widget
+packages/adapters
+services/api
+services/settlement-worker
+services/commerce-bridge
+apps/merchant-console
+apps/demo-store
+apps/pos-verifier
+docs
+examples
 ```
 
-Do not implement NFT, marketplace, points, bridge, or ERC6909 yet.
+## First implementation target
 
-## Product requirements
+Build v0.2 in this order:
 
-- RedeemLoop is FT-first.
-- 1 token = 1 full redemption right.
-- ERC20 voucher must use decimals = 0.
-- Redemption mode must support BURN and COLLECT.
-- In COLLECT mode, redeemed tokens transfer to MerchantVault, not burn.
-- MerchantVault can later redistribute tokens, but Phase 0 only needs to receive and expose balance.
-- User should redeem with EIP-712 signature, not by paying gas.
-- Relayer submits the transaction.
+1. `packages/core` type definitions and validators.
+2. PaymentIntent state machine.
+3. REST API for merchants, vaults, entitlements, bindings, payment intents, settlement proofs, webhooks.
+4. Asset Binding Wizard UI in merchant console. No issuance UI.
+5. EVM ERC-20 adapter: balance check, transfer request, transfer proof verification.
+6. Demo commerce adapter or WooCommerce adapter: create pending order and mark order paid.
+7. Widget / React pay button.
+8. Webhook signing and idempotency.
+9. Bitcoin / Fractal adapter interfaces: PSBT builder, wallet adapter, indexer adapter. Runtime can be stubbed in v0.2 if necessary.
 
-## Technical stack
+## Non-negotiable constraints
 
-- Solidity 0.8.25+
-- Foundry
-- OpenZeppelin Contracts
-- TypeScript
-- Viem
-- Fastify or NestJS
-- Next.js for POS demo
-- PostgreSQL optional for Phase 0; SQLite or in-memory is acceptable for prototype
+- No issuer functions in core.
+- No mint, deploy, etch, inscribe, launch token, tokenomics pages in merchant-console.
+- No marketplace UI.
+- No token-native pricing engine.
+- Use `VoucherAssetDescriptor`, `Entitlement`, `RedemptionBinding`, `RedeemLoopPaymentIntent`, `VoucherPaymentProof` as core models.
+- `collect` is the default settlement policy.
+- `burn` is optional.
+- `escrow` is reserved for later implementation.
+- Webhooks must be signed and idempotent.
+- PaymentIntents must expire.
+- Merchant vault changes must require re-verification.
 
-## Contracts
+## Done means
 
-Implement:
-
-1. `RedeemLoopERC20Voucher.sol`
-2. `MerchantVault.sol`
-3. `StoreTerminalRegistry.sol`
-4. `interfaces/IRedeemLoopVoucher.sol`
-
-## Required tests
-
-- mint respects maxSupply
-- decimals equals 0
-- sealMinting blocks future mint
-- collectWithAuthorization transfers user tokens to vault
-- burnWithAuthorization burns user tokens
-- nonce replay fails
-- expired authorization fails
-- unauthorized terminal fails
-- wrong termsHash fails
-- paused redemption fails
-
-## Frontend demo
-
-Build POS Verifier:
-
-1. Merchant selects store and terminal.
-2. POS creates QR/deep link.
-3. User connects wallet.
-4. User signs EIP-712 authorization.
-5. POS relayer submits.
-6. UI shows success with tx hash.
-
-## Acceptance criteria
-
-- `forge test` passes.
-- `pnpm test` passes for SDK/API if present.
-- Local README has exact startup commands.
-- Demo can run against local Anvil.
-- No private user data is written on-chain.
+- Demo can bind an existing ERC-20 token to a SKU.
+- Product page displays Pay with Voucher button.
+- User connects an EVM wallet.
+- User transfers token to merchant vault.
+- Settlement worker detects transfer.
+- Commerce adapter marks order paid.
+- Webhook delivers signed event.
+- No issuance UI exists.
+- Bitcoin / Fractal types and interfaces are present.
