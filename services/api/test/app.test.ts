@@ -7,7 +7,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { erc20TransferEvent } from "@redeemloop/adapters";
 
 import { createApp } from "../src/app.js";
-import { hmacSha256Base64 } from "../src/commerce.js";
+import { hmacSha256Base64, verifyRedeemLoopWebhookSignature } from "../src/commerce.js";
 import { buildTypedData, type RedeemAuthorizationJson } from "../src/typedData.js";
 
 const userPrivateKey = "0x59c6995e998f97a5a0044966f0945386d2e50e6a741bbd4f1550302b1435f7a5";
@@ -280,6 +280,193 @@ describe("RedeemLoop API relayer prototype", () => {
         "X-RedeemLoop-Signature": expect.stringMatching(/^[0-9a-f]{64}$/),
       }),
     );
+
+    await app.close();
+  });
+
+  it("enqueues, signs, delivers, and replays webhook delivery records", async () => {
+    const sentRequests: Array<{ rawBody: string; headers: Record<string, string>; body: unknown }> = [];
+    const app = await createApp({
+      chainId: 31337,
+      dryRun: true,
+      webhookDeliverySender: async (request) => {
+        sentRequests.push({
+          rawBody: request.rawBody,
+          headers: request.headers,
+          body: request.body,
+        });
+        expect(request.headers["X-RedeemLoop-Event-Id"]).toMatch(/^evt_pi_/);
+        expect(request.headers["X-RedeemLoop-Delivery-Id"]).toMatch(/^whd_/);
+        expect(
+          verifyRedeemLoopWebhookSignature(
+            "webhook-secret",
+            request.headers["X-RedeemLoop-Timestamp"],
+            request.headers["X-RedeemLoop-Nonce"],
+            request.rawBody,
+            request.headers["X-RedeemLoop-Signature"],
+          ),
+        ).toBe(true);
+        return { statusCode: 204, body: "ok" };
+      },
+      woocommerceStoreUrl: "https://merchant.example",
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/v1/merchants",
+      payload: {
+        merchantId: "merchant_webhook",
+        name: "Webhook Merchant",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/merchant-vaults",
+      payload: {
+        vaultId: "vault_webhook",
+        merchantId: "merchant_webhook",
+        chainNamespace: "eip155",
+        chainId: 31337,
+        address: operator,
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/entitlements",
+      payload: {
+        entitlementId: "ent_webhook",
+        merchantId: "merchant_webhook",
+        name: "Webhook pickup",
+        quantity: 1,
+        termsHash: "webhook-terms",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/bindings",
+      payload: {
+        bindingId: "bind_webhook",
+        merchantId: "merchant_webhook",
+        entitlementId: "ent_webhook",
+        acceptedAssets: [
+          {
+            chainNamespace: "eip155",
+            chainId: 31337,
+            assetType: "erc20",
+            assetId: `eip155:31337/erc20:${token}`,
+            contract: token,
+            requiredAmount: "1",
+            termsHash: "webhook-terms",
+          },
+        ],
+        merchantVaults: {
+          "eip155:31337": operator,
+        },
+        settlementPolicy: "collect",
+        commerceTargets: [
+          {
+            platform: "woocommerce",
+            storeId: "woo-store",
+            sku: "webhook-cup",
+          },
+        ],
+        status: "active",
+        termsHash: "webhook-terms",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/webhook-endpoints",
+      payload: {
+        id: "wh_outbox",
+        merchantId: "merchant_webhook",
+        url: "https://merchant.example/redeemloop/webhook",
+        secret: "webhook-secret",
+        events: ["payment_intent.paid"],
+      },
+    });
+    const intentResponse = await app.inject({
+      method: "POST",
+      url: "/v1/payment-intents",
+      payload: {
+        bindingId: "bind_webhook",
+        orderId: "webhook-42",
+        channel: "checkout",
+        skuLines: [{ sku: "webhook-cup", quantity: 1 }],
+        payerAddress: user.address,
+      },
+    });
+    const intentId = intentResponse.json().intentId as string;
+    const proofResponse = await app.inject({
+      method: "POST",
+      url: "/v1/settlement/proofs",
+      payload: {
+        intentId,
+        txid: "0xwebhook",
+        confirmations: 3,
+        from: user.address,
+        to: operator,
+        status: "confirmed",
+      },
+    });
+    expect(proofResponse.statusCode).toBe(201);
+    expect(proofResponse.json().webhookEvent).toMatchObject({
+      type: "payment_intent.paid",
+      merchantId: "merchant_webhook",
+      deliveryIds: [expect.stringMatching(/^whd_/)],
+    });
+
+    const deliveryId = proofResponse.json().webhookEvent.deliveryIds[0] as string;
+    const deliveriesResponse = await app.inject({
+      method: "GET",
+      url: "/v1/webhook-deliveries?merchantId=merchant_webhook",
+    });
+    expect(deliveriesResponse.statusCode).toBe(200);
+    expect(deliveriesResponse.json()).toHaveLength(1);
+    expect(deliveriesResponse.json()[0]).toMatchObject({
+      deliveryId,
+      status: "pending",
+      attempts: 0,
+      eventType: "payment_intent.paid",
+    });
+
+    const attemptResponse = await app.inject({
+      method: "POST",
+      url: `/v1/webhook-deliveries/${deliveryId}/attempt`,
+    });
+    expect(attemptResponse.statusCode).toBe(200);
+    expect(attemptResponse.json()).toMatchObject({
+      deliveryId,
+      status: "delivered",
+      attempts: 1,
+      responseStatus: 204,
+      request: {
+        method: "POST",
+        url: "https://merchant.example/redeemloop/webhook",
+      },
+    });
+    expect(sentRequests).toHaveLength(1);
+    expect(JSON.parse(sentRequests[0].rawBody)).toMatchObject({
+      type: "payment_intent.paid",
+      merchantId: "merchant_webhook",
+      intentId,
+      orderId: "webhook-42",
+      txHash: "0xwebhook",
+    });
+
+    const replayResponse = await app.inject({
+      method: "POST",
+      url: `/v1/webhook-deliveries/${deliveryId}/replay`,
+      payload: {
+        attemptNow: true,
+      },
+    });
+    expect(replayResponse.statusCode).toBe(201);
+    expect(replayResponse.json()).toMatchObject({
+      status: "delivered",
+      attempts: 1,
+    });
+    expect(sentRequests).toHaveLength(2);
 
     await app.close();
   });

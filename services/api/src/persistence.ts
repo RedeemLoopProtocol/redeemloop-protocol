@@ -15,6 +15,8 @@ export interface RedeemLoopApiSnapshot {
   proofIdempotency: Array<[string, string]>;
   markPaidIdempotency: string[];
   webhookEndpoints: unknown[];
+  webhookEvents?: unknown[];
+  webhookDeliveries?: unknown[];
   registeredTerminals: string[];
   redemptionSubmissions: string[];
 }

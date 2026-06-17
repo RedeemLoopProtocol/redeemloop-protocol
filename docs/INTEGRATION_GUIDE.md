@@ -1,4 +1,4 @@
-# RedeemLoop Integration Guide v0.2.4 / 集成指南 v0.2.4
+# RedeemLoop Integration Guide v0.2.5 / 集成指南 v0.2.5
 
 ## English
 
@@ -157,7 +157,7 @@ For local or pilot environments, the API can persist sandbox state to a JSON fil
 REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json pnpm api:dev
 ```
 
-The file-backed adapter persists merchants, vaults, entitlements, bindings, PaymentIntents, settlement proofs, idempotency keys, webhook endpoints, and commerce payment records. It is useful for restarts and pilot demos, but production deployments should still move to a managed database.
+The file-backed adapter persists merchants, vaults, entitlements, bindings, PaymentIntents, settlement proofs, idempotency keys, webhook endpoints, webhook events, webhook delivery records, and commerce payment records. It is useful for restarts and pilot demos, but production deployments should still move to a managed database.
 
 Merchant-scoped API key enforcement can be enabled with:
 
@@ -179,7 +179,7 @@ Authorization: Bearer dev-secret
 
 ### 9. WooCommerce and Shopify
 
-v0.2.4 includes a sandbox WooCommerce payment gateway plugin at:
+v0.2.5 includes a sandbox WooCommerce payment gateway plugin at:
 
 ```text
 plugins/woocommerce/redeemloop-voucher-gateway.php
@@ -201,11 +201,43 @@ The plugin provides:
 
 Shopify should initially use product-page buttons or external/manual payment bridge patterns. Do not block the early protocol on a Shopify payment app review.
 
-### 10. Current Limits
+### 10. Webhook Delivery Operations
+
+When settlement confirmation moves a `PaymentIntent` to `paid`, the API writes a `payment_intent.paid` event and creates delivery records for active matching webhook endpoints.
+
+Outbound requests are signed with:
+
+```text
+X-RedeemLoop-Event-Id
+X-RedeemLoop-Delivery-Id
+X-RedeemLoop-Timestamp
+X-RedeemLoop-Nonce
+X-RedeemLoop-Signature = hex(hmac_sha256(secret, timestamp + "." + nonce + "." + rawBody))
+```
+
+Useful operations:
+
+```http
+GET  /v1/webhook-events?merchantId=merchant_cafe
+GET  /v1/webhook-deliveries?merchantId=merchant_cafe
+POST /v1/webhook-deliveries/:deliveryId/attempt
+POST /v1/webhook-deliveries/:deliveryId/replay
+```
+
+SDK helpers:
+
+```ts
+await client.listWebhookEvents({ merchantId: "merchant_cafe" });
+await client.listWebhookDeliveries({ merchantId: "merchant_cafe", status: "failed" });
+await client.attemptWebhookDelivery("whd_...");
+await client.replayWebhookDelivery("whd_...", { attemptNow: true });
+```
+
+### 11. Current Limits
 
 - Production database migrations are not included yet; v0.2.2 persistence is a file-backed sandbox adapter.
 - Client-submitted settlement proof still exists for sandbox/manual flows; EVM ERC-20 can now use trusted receipt recheck.
-- Webhook endpoint testing exists, but reliable delivery queues arrive in a later release.
+- Webhook delivery operations are implemented as a sandbox outbox in the API process. Production deployments should move the same model to a managed database and worker queue.
 
 ---
 
@@ -366,7 +398,7 @@ REDEEMLOOP_EMBED_ALLOWED_ORIGINS="https://shop.example,https://checkout.example"
 REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json pnpm api:dev
 ```
 
-文件持久化 adapter 会保存 merchant、vault、entitlement、binding、PaymentIntent、settlement proof、幂等 key、webhook endpoint 和 commerce payment record。它适合重启恢复和 pilot demo，但生产部署仍应迁移到托管数据库。
+文件持久化 adapter 会保存 merchant、vault、entitlement、binding、PaymentIntent、settlement proof、幂等 key、webhook endpoint、webhook event、webhook delivery record 和 commerce payment record。它适合重启恢复和 pilot demo，但生产部署仍应迁移到托管数据库。
 
 商户级 API key 校验可以这样开启：
 
@@ -388,7 +420,7 @@ Authorization: Bearer dev-secret
 
 ### 9. WooCommerce 和 Shopify
 
-v0.2.4 已包含 WooCommerce sandbox payment gateway 插件：
+v0.2.5 已包含 WooCommerce sandbox payment gateway 插件：
 
 ```text
 plugins/woocommerce/redeemloop-voucher-gateway.php
@@ -410,8 +442,40 @@ Checkout payment method -> RedeemLoop Pay Button/widget -> settlement confirmati
 
 Shopify 初期建议采用商品页按钮或 external/manual payment bridge 模式，不要让早期协议阻塞在 Shopify payment app 审核上。
 
-### 10. 当前限制
+### 10. Webhook 投递运维
+
+当 settlement confirmation 把 `PaymentIntent` 推进到 `paid` 后，API 会写入 `payment_intent.paid` event，并为匹配的 active webhook endpoint 创建 delivery record。
+
+出站请求签名：
+
+```text
+X-RedeemLoop-Event-Id
+X-RedeemLoop-Delivery-Id
+X-RedeemLoop-Timestamp
+X-RedeemLoop-Nonce
+X-RedeemLoop-Signature = hex(hmac_sha256(secret, timestamp + "." + nonce + "." + rawBody))
+```
+
+常用运维 API：
+
+```http
+GET  /v1/webhook-events?merchantId=merchant_cafe
+GET  /v1/webhook-deliveries?merchantId=merchant_cafe
+POST /v1/webhook-deliveries/:deliveryId/attempt
+POST /v1/webhook-deliveries/:deliveryId/replay
+```
+
+SDK helper：
+
+```ts
+await client.listWebhookEvents({ merchantId: "merchant_cafe" });
+await client.listWebhookDeliveries({ merchantId: "merchant_cafe", status: "failed" });
+await client.attemptWebhookDelivery("whd_...");
+await client.replayWebhookDelivery("whd_...", { attemptNow: true });
+```
+
+### 11. 当前限制
 
 - 尚未提供生产数据库 migrations；v0.2.2 的持久化是文件型 sandbox adapter。
 - 客户端提交 settlement proof 仍保留用于 sandbox/manual flow；EVM ERC-20 现在可以使用可信 receipt recheck。
-- webhook endpoint test 已存在，可靠投递队列会在后续版本实现。
+- webhook delivery operations 已作为 API 进程内 sandbox outbox 实现。生产部署应迁移到托管数据库和 worker queue。

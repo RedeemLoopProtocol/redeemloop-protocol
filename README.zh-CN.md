@@ -35,6 +35,7 @@ PaymentIntent
 - 文件持久化 sandbox 和商户级 API key 校验，适用于本地和 pilot 环境。
 - 基于 transaction receipt 的可信 EVM ERC-20 settlement recheck。
 - WooCommerce sandbox payment gateway plugin。
+- Webhook event outbox、签名投递、重试状态、dead-letter 状态和 replay API。
 - 商户收券地址 / vault 确认模型。
 - Settlement proof 提交与幂等。
 - WooCommerce、Shopify、自定义 mark-as-paid 适配表面。
@@ -107,7 +108,7 @@ REDEEMLOOP_API_KEYS="merchant_cafe:dev-secret" \
 pnpm api:dev
 ```
 
-`REDEEMLOOP_STORAGE_FILE` 会把 merchant、vault、entitlement、binding、PaymentIntent、settlement proof、幂等 key、webhook endpoint 和 commerce payment record 持久化到本地文件，API 重启后仍可恢复。它是 sandbox persistence adapter，不是生产数据库替代品。
+`REDEEMLOOP_STORAGE_FILE` 会把 merchant、vault、entitlement、binding、PaymentIntent、settlement proof、幂等 key、webhook endpoint、webhook event、webhook delivery record 和 commerce payment record 持久化到本地文件，API 重启后仍可恢复。它是 sandbox persistence adapter，不是生产数据库替代品。
 `REDEEMLOOP_API_KEYS` 支持逗号分隔的 `merchantId:apiKey`，也支持 JSON object 字符串。配置后，商户级 `/v1` API 调用必须携带 `Authorization: Bearer <apiKey>`。
 
 可信 EVM settlement recheck 可以这样启用：
@@ -203,6 +204,12 @@ POST /v1/settlement/proofs
 POST /v1/settlement/evm/recheck/:intentId
 POST /v1/webhook-endpoints
 POST /v1/webhook-endpoints/:id/test
+GET  /v1/webhook-events?merchantId=...
+GET  /v1/webhook-events/:eventId
+GET  /v1/webhook-deliveries?merchantId=...
+GET  /v1/webhook-deliveries/:deliveryId
+POST /v1/webhook-deliveries/:deliveryId/attempt
+POST /v1/webhook-deliveries/:deliveryId/replay
 ```
 
 ## WooCommerce Sandbox 插件
@@ -222,6 +229,29 @@ Webhook endpoint：
 ```text
 POST /wp-json/redeemloop/v1/woocommerce/mark-paid
 ```
+
+## Webhook 投递运维
+
+当 `PaymentIntent` 进入 `paid` 状态时，API 会写入一个 `payment_intent.paid` webhook event，并为每个匹配的 active 商户 endpoint 创建 delivery record。投递请求使用：
+
+```text
+X-RedeemLoop-Event-Id
+X-RedeemLoop-Delivery-Id
+X-RedeemLoop-Timestamp
+X-RedeemLoop-Nonce
+X-RedeemLoop-Signature = hex(hmac_sha256(secret, timestamp + "." + nonce + "." + rawBody))
+```
+
+商户可以通过以下 API 查询和操作 delivery：
+
+```text
+GET  /v1/webhook-events?merchantId=...
+GET  /v1/webhook-deliveries?merchantId=...
+POST /v1/webhook-deliveries/:deliveryId/attempt
+POST /v1/webhook-deliveries/:deliveryId/replay
+```
+
+这仍是基于当前 API persistence adapter 的 sandbox 运维层。生产部署应迁移到托管数据库和 worker queue。
 
 旧 v0.1 relayer 路由仅作为兼容测试保留。新集成应使用 v0.2 Asset Binding 和 PaymentIntent API。
 

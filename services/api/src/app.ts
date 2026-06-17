@@ -84,6 +84,8 @@ interface ApiConfig {
     receipt: Erc20TransactionReceiptLike;
     currentBlockNumber?: bigint | number;
   }>;
+  webhookMaxAttempts: number;
+  webhookDeliverySender?: (request: WebhookDeliveryRequest) => Promise<WebhookDeliverySenderResult>;
   shopifyShopDomain?: string;
   shopifyAdminAccessToken?: string;
   shopifyApiVersion: string;
@@ -92,6 +94,23 @@ interface ApiConfig {
   woocommerceConsumerKey?: string;
   woocommerceConsumerSecret?: string;
   woocommerceWebhookSecret?: string;
+}
+
+type WebhookDeliveryStatus = "pending" | "delivered" | "failed" | "dead_letter";
+
+interface WebhookDeliveryRequest {
+  deliveryId: string;
+  eventId: string;
+  eventType: string;
+  url: string;
+  headers: Record<string, string>;
+  rawBody: string;
+  body: unknown;
+}
+
+interface WebhookDeliverySenderResult {
+  statusCode: number;
+  body?: unknown;
 }
 
 interface MerchantRecord {
@@ -122,6 +141,42 @@ interface WebhookEndpointRecord {
   secret: string;
   events: string[];
   active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface WebhookEventRecord {
+  eventId: string;
+  merchantId: string;
+  type: string;
+  payload: unknown;
+  deliveryIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface WebhookDeliveryRecord {
+  deliveryId: string;
+  eventId: string;
+  endpointId: string;
+  merchantId: string;
+  eventType: string;
+  url: string;
+  status: WebhookDeliveryStatus;
+  attempts: number;
+  maxAttempts: number;
+  nextAttemptAt?: string;
+  lastAttemptAt?: string;
+  deliveredAt?: string;
+  lastError?: string;
+  responseStatus?: number;
+  responseBody?: unknown;
+  request?: {
+    method: "POST";
+    url: string;
+    headers: Record<string, string>;
+    body: unknown;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -177,6 +232,8 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
   const proofIdempotency = new PersistentMap<string, string>(() => schedulePersist());
   const markPaidIdempotency = new PersistentSet<string>(() => schedulePersist());
   const webhookEndpoints = new PersistentMap<string, WebhookEndpointRecord>(() => schedulePersist());
+  const webhookEvents = new PersistentMap<string, WebhookEventRecord>(() => schedulePersist());
+  const webhookDeliveries = new PersistentMap<string, WebhookDeliveryRecord>(() => schedulePersist());
   const resolvedConfig: ApiConfig = {
     chainId: normalizeChainId(config.chainId ?? process.env.CHAIN_ID ?? 31337),
     rpcUrl: config.rpcUrl ?? process.env.RPC_URL,
@@ -191,6 +248,8 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     apiKeys: parseMerchantApiKeys(config.apiKeys ?? process.env.REDEEMLOOP_API_KEYS),
     evmMinConfirmations: normalizePositiveInteger(config.evmMinConfirmations ?? process.env.EVM_MIN_CONFIRMATIONS ?? 1, "evmMinConfirmations"),
     evmReceiptProvider: config.evmReceiptProvider,
+    webhookMaxAttempts: normalizePositiveInteger(config.webhookMaxAttempts ?? process.env.WEBHOOK_MAX_ATTEMPTS ?? 5, "webhookMaxAttempts"),
+    webhookDeliverySender: config.webhookDeliverySender,
     shopifyShopDomain: config.shopifyShopDomain ?? process.env.SHOPIFY_SHOP_DOMAIN,
     shopifyAdminAccessToken: config.shopifyAdminAccessToken ?? process.env.SHOPIFY_ADMIN_ACCESS_TOKEN,
     shopifyApiVersion: config.shopifyApiVersion ?? process.env.SHOPIFY_ADMIN_API_VERSION ?? "2026-04",
@@ -215,6 +274,8 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       proofIdempotency,
       markPaidIdempotency,
       webhookEndpoints,
+      webhookEvents,
+      webhookDeliveries,
       registeredTerminals,
       redemptionSubmissions,
     });
@@ -237,6 +298,8 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
             proofIdempotency,
             markPaidIdempotency,
             webhookEndpoints,
+            webhookEvents,
+            webhookDeliveries,
             registeredTerminals,
             redemptionSubmissions,
           }),
@@ -263,6 +326,8 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
           proofIdempotency,
           markPaidIdempotency,
           webhookEndpoints,
+          webhookEvents,
+          webhookDeliveries,
           registeredTerminals,
           redemptionSubmissions,
         }),
@@ -301,6 +366,8 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       paymentIntents,
       settlementProofs,
       webhookEndpoints,
+      webhookEvents,
+      webhookDeliveries,
     });
     if (!merchantContext.required) return;
     if (!merchantContext.merchantId) {
@@ -323,6 +390,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     dryRun: resolvedConfig.dryRun,
     embedAllowedOrigins: resolvedConfig.embedAllowedOrigins.includes("*") ? ["*"] : resolvedConfig.embedAllowedOrigins,
     evmMinConfirmations: resolvedConfig.evmMinConfirmations,
+    webhookMaxAttempts: resolvedConfig.webhookMaxAttempts,
     persistence: {
       enabled: persistence.enabled,
     },
@@ -748,11 +816,23 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       const commerce = proof.status === "confirmed" || proof.status === "finalized"
         ? await markIntentCommercePaid(nextIntent, proof, bindings.get(nextIntent.bindingId), resolvedConfig, markPaidIdempotency)
         : undefined;
+      const webhookEvent = nextIntent.status === "paid"
+        ? enqueuePaymentIntentWebhookEvent({
+            eventType: "payment_intent.paid",
+            intent: nextIntent,
+            proof,
+            webhookEndpoints,
+            webhookEvents,
+            webhookDeliveries,
+            maxAttempts: resolvedConfig.webhookMaxAttempts,
+          })
+        : undefined;
 
       return reply.code(201).send({
         ...proof,
         paymentIntent: paymentIntents.get(nextIntent.intentId),
         commerce,
+        webhookEvent,
       });
     } catch (error) {
       return reply.code(400).send(errorBody(error));
@@ -820,12 +900,24 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       const commerce = proof.status === "confirmed" || proof.status === "finalized"
         ? await markIntentCommercePaid(nextIntent, proof, bindings.get(nextIntent.bindingId), resolvedConfig, markPaidIdempotency)
         : undefined;
+      const webhookEvent = nextIntent.status === "paid"
+        ? enqueuePaymentIntentWebhookEvent({
+            eventType: "payment_intent.paid",
+            intent: nextIntent,
+            proof,
+            webhookEndpoints,
+            webhookEvents,
+            webhookDeliveries,
+            maxAttempts: resolvedConfig.webhookMaxAttempts,
+          })
+        : undefined;
 
       return reply.code(201).send({
         ...proof,
         trusted: true,
         paymentIntent: paymentIntents.get(nextIntent.intentId),
         commerce,
+        webhookEvent,
       });
     } catch (error) {
       return reply.code(400).send(errorBody(error));
@@ -880,6 +972,86 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
         body: JSON.parse(body),
       },
     };
+  });
+
+  app.get("/v1/webhook-events", async (request) => {
+    const query = request.query as { merchantId?: string; type?: string };
+    return [...webhookEvents.values()].filter((event) => {
+      if (query.merchantId && event.merchantId !== query.merchantId) return false;
+      if (query.type && event.type !== query.type) return false;
+      return true;
+    });
+  });
+
+  app.get("/v1/webhook-events/:eventId", async (request, reply) => {
+    const params = request.params as { eventId: string };
+    const event = webhookEvents.get(params.eventId);
+    if (!event) return reply.code(404).send({ error: "Webhook event not found" });
+    return event;
+  });
+
+  app.get("/v1/webhook-deliveries", async (request) => {
+    const query = request.query as { merchantId?: string; eventId?: string; endpointId?: string; status?: WebhookDeliveryStatus };
+    return [...webhookDeliveries.values()].filter((delivery) => {
+      if (query.merchantId && delivery.merchantId !== query.merchantId) return false;
+      if (query.eventId && delivery.eventId !== query.eventId) return false;
+      if (query.endpointId && delivery.endpointId !== query.endpointId) return false;
+      if (query.status && delivery.status !== query.status) return false;
+      return true;
+    });
+  });
+
+  app.get("/v1/webhook-deliveries/:deliveryId", async (request, reply) => {
+    const params = request.params as { deliveryId: string };
+    const delivery = webhookDeliveries.get(params.deliveryId);
+    if (!delivery) return reply.code(404).send({ error: "Webhook delivery not found" });
+    return delivery;
+  });
+
+  app.post("/v1/webhook-deliveries/:deliveryId/attempt", async (request, reply) => {
+    try {
+      const params = request.params as { deliveryId: string };
+      const delivery = webhookDeliveries.get(params.deliveryId);
+      if (!delivery) return reply.code(404).send({ error: "Webhook delivery not found" });
+      return await attemptWebhookDelivery(delivery, {
+        webhookEndpoints,
+        webhookEvents,
+        webhookDeliveries,
+      }, resolvedConfig);
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.post("/v1/webhook-deliveries/:deliveryId/replay", async (request, reply) => {
+    try {
+      const params = request.params as { deliveryId: string };
+      const source = webhookDeliveries.get(params.deliveryId);
+      if (!source) return reply.code(404).send({ error: "Webhook delivery not found" });
+      const event = webhookEvents.get(source.eventId);
+      if (!event) return reply.code(404).send({ error: "Webhook event not found" });
+      const endpoint = webhookEndpoints.get(source.endpointId);
+      if (!endpoint) return reply.code(404).send({ error: "Webhook endpoint not found" });
+      const replay = createWebhookDelivery(event, endpoint, new Date().toISOString(), resolvedConfig.webhookMaxAttempts);
+      webhookDeliveries.set(replay.deliveryId, replay);
+      webhookEvents.set(event.eventId, {
+        ...event,
+        deliveryIds: [...event.deliveryIds, replay.deliveryId],
+        updatedAt: replay.createdAt,
+      });
+      if (recordOf(request.body).attemptNow === true) {
+        return reply.code(201).send(
+          await attemptWebhookDelivery(replay, {
+            webhookEndpoints,
+            webhookEvents,
+            webhookDeliveries,
+          }, resolvedConfig),
+        );
+      }
+      return reply.code(201).send(replay);
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
   });
 
   app.post("/v1/merchants/:merchantId/receiving-address", async (request, reply) => {
@@ -1209,6 +1381,8 @@ interface SnapshotStores {
   proofIdempotency: Map<string, string>;
   markPaidIdempotency: Set<string>;
   webhookEndpoints: Map<string, WebhookEndpointRecord>;
+  webhookEvents: Map<string, WebhookEventRecord>;
+  webhookDeliveries: Map<string, WebhookDeliveryRecord>;
   registeredTerminals: Set<string>;
   redemptionSubmissions: Set<string>;
 }
@@ -1228,6 +1402,8 @@ function createApiSnapshot(stores: SnapshotStores): RedeemLoopApiSnapshot {
     proofIdempotency: [...stores.proofIdempotency.entries()],
     markPaidIdempotency: [...stores.markPaidIdempotency.values()],
     webhookEndpoints: [...stores.webhookEndpoints.values()],
+    webhookEvents: [...stores.webhookEvents.values()],
+    webhookDeliveries: [...stores.webhookDeliveries.values()],
     registeredTerminals: [...stores.registeredTerminals.values()],
     redemptionSubmissions: [...stores.redemptionSubmissions.values()],
   };
@@ -1247,6 +1423,8 @@ function hydrateApiSnapshot(snapshot: RedeemLoopApiSnapshot, stores: SnapshotSto
   for (const [key, proofId] of snapshot.proofIdempotency ?? []) stores.proofIdempotency.set(key, proofId);
   for (const key of snapshot.markPaidIdempotency ?? []) stores.markPaidIdempotency.add(key);
   for (const endpoint of snapshot.webhookEndpoints as WebhookEndpointRecord[]) stores.webhookEndpoints.set(endpoint.id, endpoint);
+  for (const event of (snapshot.webhookEvents ?? []) as WebhookEventRecord[]) stores.webhookEvents.set(event.eventId, event);
+  for (const delivery of (snapshot.webhookDeliveries ?? []) as WebhookDeliveryRecord[]) stores.webhookDeliveries.set(delivery.deliveryId, delivery);
   for (const key of snapshot.registeredTerminals ?? []) stores.registeredTerminals.add(key);
   for (const key of snapshot.redemptionSubmissions ?? []) stores.redemptionSubmissions.add(key);
 }
@@ -1259,6 +1437,8 @@ interface MerchantContextStores {
   paymentIntents: Map<string, RedeemLoopPaymentIntent>;
   settlementProofs: Map<string, VoucherPaymentProof>;
   webhookEndpoints: Map<string, WebhookEndpointRecord>;
+  webhookEvents: Map<string, WebhookEventRecord>;
+  webhookDeliveries: Map<string, WebhookDeliveryRecord>;
 }
 
 function resolveRequestMerchantId(
@@ -1296,7 +1476,19 @@ function resolveRequestMerchantId(
   const webhookEndpointId = stringOf(params.id);
   if (webhookEndpointId) return { required: true, merchantId: stores.webhookEndpoints.get(webhookEndpointId)?.merchantId };
 
-  if (request.url.startsWith("/v1/webhook-endpoints") || request.url.startsWith("/v1/merchant-vaults") || request.url.startsWith("/v1/bindings")) {
+  const webhookEventId = stringOf(params.eventId) ?? stringOf(query.eventId);
+  if (webhookEventId) return { required: true, merchantId: stores.webhookEvents.get(webhookEventId)?.merchantId };
+
+  const webhookDeliveryId = stringOf(params.deliveryId);
+  if (webhookDeliveryId) return { required: true, merchantId: stores.webhookDeliveries.get(webhookDeliveryId)?.merchantId };
+
+  if (
+    request.url.startsWith("/v1/webhook-endpoints") ||
+    request.url.startsWith("/v1/webhook-events") ||
+    request.url.startsWith("/v1/webhook-deliveries") ||
+    request.url.startsWith("/v1/merchant-vaults") ||
+    request.url.startsWith("/v1/bindings")
+  ) {
     return { required: true, error: "merchantId is required when API keys are enabled" };
   }
 
@@ -1656,6 +1848,224 @@ async function markIntentCommercePaid(
 function commerceProviderForTarget(target: CommerceTarget | undefined): CommerceProvider {
   if (target?.platform === "shopify" || target?.platform === "woocommerce" || target?.platform === "custom") return target.platform;
   return "custom";
+}
+
+interface WebhookOutboxStores {
+  webhookEndpoints: Map<string, WebhookEndpointRecord>;
+  webhookEvents: Map<string, WebhookEventRecord>;
+  webhookDeliveries: Map<string, WebhookDeliveryRecord>;
+}
+
+function enqueuePaymentIntentWebhookEvent(input: {
+  eventType: string;
+  intent: RedeemLoopPaymentIntent;
+  proof: VoucherPaymentProof;
+  webhookEndpoints: Map<string, WebhookEndpointRecord>;
+  webhookEvents: Map<string, WebhookEventRecord>;
+  webhookDeliveries: Map<string, WebhookDeliveryRecord>;
+  maxAttempts: number;
+}): WebhookEventRecord {
+  const now = new Date().toISOString();
+  const eventId = stableWebhookEventId(input.eventType, input.intent.intentId);
+  const existing = input.webhookEvents.get(eventId);
+  if (existing) return existing;
+
+  const event: WebhookEventRecord = {
+    eventId,
+    merchantId: input.intent.merchantId,
+    type: input.eventType,
+    payload: paymentIntentWebhookPayload(eventId, input.eventType, input.intent, input.proof, now),
+    deliveryIds: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  const matchingEndpoints = [...input.webhookEndpoints.values()].filter(
+    (endpoint) => endpoint.active && endpoint.merchantId === input.intent.merchantId && endpointAcceptsEvent(endpoint, input.eventType),
+  );
+  const deliveryIds: string[] = [];
+  for (const endpoint of matchingEndpoints) {
+    const delivery = createWebhookDelivery(event, endpoint, now, input.maxAttempts);
+    input.webhookDeliveries.set(delivery.deliveryId, delivery);
+    deliveryIds.push(delivery.deliveryId);
+  }
+  const eventWithDeliveries = { ...event, deliveryIds, updatedAt: now };
+  input.webhookEvents.set(eventWithDeliveries.eventId, eventWithDeliveries);
+  return eventWithDeliveries;
+}
+
+function paymentIntentWebhookPayload(
+  eventId: string,
+  eventType: string,
+  intent: RedeemLoopPaymentIntent,
+  proof: VoucherPaymentProof,
+  createdAt: string,
+) {
+  return {
+    id: eventId,
+    type: eventType,
+    createdAt,
+    merchantId: intent.merchantId,
+    intentId: intent.intentId,
+    orderId: intent.orderId,
+    txHash: proof.txid,
+    paymentIntent: intent,
+    proof,
+    data: {
+      paymentIntent: intent,
+      proof,
+    },
+  };
+}
+
+function stableWebhookEventId(eventType: string, intentId: string): string {
+  return `evt_${intentId}_${eventType.replace(/[^a-zA-Z0-9]+/g, "_")}`;
+}
+
+function endpointAcceptsEvent(endpoint: WebhookEndpointRecord, eventType: string): boolean {
+  return endpoint.events.includes("*") || endpoint.events.includes(eventType);
+}
+
+function createWebhookDelivery(
+  event: WebhookEventRecord,
+  endpoint: WebhookEndpointRecord,
+  now: string,
+  maxAttempts: number,
+): WebhookDeliveryRecord {
+  return {
+    deliveryId: randomId("whd"),
+    eventId: event.eventId,
+    endpointId: endpoint.id,
+    merchantId: event.merchantId,
+    eventType: event.type,
+    url: endpoint.url,
+    status: "pending",
+    attempts: 0,
+    maxAttempts,
+    nextAttemptAt: now,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+async function attemptWebhookDelivery(
+  delivery: WebhookDeliveryRecord,
+  stores: WebhookOutboxStores,
+  config: ApiConfig,
+): Promise<WebhookDeliveryRecord> {
+  const event = stores.webhookEvents.get(delivery.eventId);
+  if (!event) throw new Error("Webhook event not found");
+  const endpoint = stores.webhookEndpoints.get(delivery.endpointId);
+  if (!endpoint) throw new Error("Webhook endpoint not found");
+  if (!endpoint.active) throw new Error("Webhook endpoint is not active");
+
+  const request = createWebhookDeliveryRequest(delivery, event, endpoint);
+  const attemptCount = delivery.attempts + 1;
+  const attemptedAt = new Date().toISOString();
+  try {
+    const sender = config.webhookDeliverySender ?? defaultWebhookDeliverySender;
+    const response = await sender(request);
+    const ok = response.statusCode >= 200 && response.statusCode < 300;
+    const updated = finalizeWebhookDeliveryAttempt(delivery, {
+      request,
+      attempts: attemptCount,
+      attemptedAt,
+      statusCode: response.statusCode,
+      responseBody: response.body,
+      error: ok ? undefined : `Webhook endpoint returned HTTP ${response.statusCode}`,
+      delivered: ok,
+    });
+    stores.webhookDeliveries.set(updated.deliveryId, updated);
+    return updated;
+  } catch (error) {
+    const updated = finalizeWebhookDeliveryAttempt(delivery, {
+      request,
+      attempts: attemptCount,
+      attemptedAt,
+      error: error instanceof Error ? error.message : "Webhook delivery failed",
+      delivered: false,
+    });
+    stores.webhookDeliveries.set(updated.deliveryId, updated);
+    return updated;
+  }
+}
+
+function createWebhookDeliveryRequest(
+  delivery: WebhookDeliveryRecord,
+  event: WebhookEventRecord,
+  endpoint: WebhookEndpointRecord,
+): WebhookDeliveryRequest {
+  const rawBody = JSON.stringify(event.payload);
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = randomBytes(8).toString("hex");
+  const headers = {
+    "Content-Type": "application/json",
+    "X-RedeemLoop-Event-Id": event.eventId,
+    "X-RedeemLoop-Delivery-Id": delivery.deliveryId,
+    "X-RedeemLoop-Timestamp": timestamp,
+    "X-RedeemLoop-Nonce": nonce,
+    "X-RedeemLoop-Signature": signRedeemLoopWebhook(endpoint.secret, timestamp, nonce, rawBody),
+  };
+  return {
+    deliveryId: delivery.deliveryId,
+    eventId: event.eventId,
+    eventType: event.type,
+    url: delivery.url,
+    headers,
+    rawBody,
+    body: event.payload,
+  };
+}
+
+function finalizeWebhookDeliveryAttempt(
+  delivery: WebhookDeliveryRecord,
+  result: {
+    request: WebhookDeliveryRequest;
+    attempts: number;
+    attemptedAt: string;
+    statusCode?: number;
+    responseBody?: unknown;
+    error?: string;
+    delivered: boolean;
+  },
+): WebhookDeliveryRecord {
+  const exhausted = !result.delivered && result.attempts >= delivery.maxAttempts;
+  const nextStatus: WebhookDeliveryStatus = result.delivered ? "delivered" : exhausted ? "dead_letter" : "failed";
+  const nextAttemptAt = result.delivered || exhausted ? undefined : new Date(Date.now() + webhookBackoffMs(result.attempts)).toISOString();
+  return {
+    ...delivery,
+    status: nextStatus,
+    attempts: result.attempts,
+    nextAttemptAt,
+    lastAttemptAt: result.attemptedAt,
+    deliveredAt: result.delivered ? result.attemptedAt : delivery.deliveredAt,
+    lastError: result.error,
+    responseStatus: result.statusCode,
+    responseBody: result.responseBody,
+    request: {
+      method: "POST",
+      url: result.request.url,
+      headers: result.request.headers,
+      body: result.request.body,
+    },
+    updatedAt: result.attemptedAt,
+  };
+}
+
+function webhookBackoffMs(attempts: number): number {
+  return Math.min(60_000 * 2 ** Math.max(0, attempts - 1), 60 * 60_000);
+}
+
+async function defaultWebhookDeliverySender(request: WebhookDeliveryRequest): Promise<WebhookDeliverySenderResult> {
+  const response = await fetch(request.url, {
+    method: "POST",
+    headers: request.headers,
+    body: request.rawBody,
+  });
+  const body = await response.text().catch(() => undefined);
+  return {
+    statusCode: response.status,
+    body,
+  };
 }
 
 function redactWebhookSecret(endpoint: WebhookEndpointRecord) {

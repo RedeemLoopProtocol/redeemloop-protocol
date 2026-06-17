@@ -4,6 +4,26 @@
 
 No unreleased changes yet.
 
+## v0.2.5 - 2026-06-18
+
+### Added
+
+- Persistent webhook event outbox and delivery records for `payment_intent.paid`.
+- Signed outbound webhook delivery attempts with `X-RedeemLoop-Event-Id`, `X-RedeemLoop-Delivery-Id`, timestamp, nonce, and HMAC signature headers.
+- Delivery status APIs for listing events, listing deliveries, reading delivery details, manual attempts, and replay.
+- Retry/backoff state with `failed` and `dead_letter` delivery statuses.
+- SDK helpers for webhook events and delivery operations.
+- API tests for event enqueue, signature verification, successful delivery, and replay.
+
+### 中文说明
+
+- 新增 `payment_intent.paid` 的持久化 webhook event outbox 和 delivery record。
+- 新增出站 webhook 签名投递，包含 `X-RedeemLoop-Event-Id`、`X-RedeemLoop-Delivery-Id`、timestamp、nonce 和 HMAC signature headers。
+- 新增 delivery status API：event 列表、delivery 列表、delivery 详情、手动 attempt 和 replay。
+- 新增 retry/backoff 状态，以及 `failed`、`dead_letter` delivery 状态。
+- SDK 新增 webhook event 和 delivery operations helper。
+- API 测试覆盖 event 入队、签名校验、成功投递和 replay。
+
 ## v0.2.4 - 2026-06-18
 
 ### Added

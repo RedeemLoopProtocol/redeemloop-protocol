@@ -14,10 +14,13 @@ import type {
   EvmSettlementRecheckInput,
   EvmSettlementRecheckResponse,
   ListBindingsInput,
+  ListWebhookDeliveriesInput,
+  ListWebhookEventsInput,
   ListMerchantVaultsInput,
   MerchantVault,
   ReceivingAddressRecord,
   RedeemLoopMerchant,
+  ReplayWebhookDeliveryInput,
   SelectAssetInput,
   SetReceivingAddressInput,
   SettlementProofResponse,
@@ -28,7 +31,9 @@ import type {
   UpdateEntitlementInput,
   VerifyMerchantDomainInput,
   VerifyMerchantVaultSignatureInput,
+  WebhookDelivery,
   WebhookEndpoint,
+  WebhookEvent,
 } from "./types.js";
 import type { Entitlement, RedeemLoopPaymentIntent, RedemptionBinding } from "@redeemloop/core";
 
@@ -204,6 +209,33 @@ export class RedeemLoopClient {
 
   async testWebhookEndpoint(endpointId: string): Promise<TestWebhookEndpointResponse> {
     return this.request(`/v1/webhook-endpoints/${encodeURIComponent(endpointId)}/test`, { method: "POST" });
+  }
+
+  async listWebhookEvents(input: ListWebhookEventsInput = {}): Promise<WebhookEvent[]> {
+    return this.request(this.withQuery("/v1/webhook-events", input));
+  }
+
+  async getWebhookEvent(eventId: string): Promise<WebhookEvent> {
+    return this.request(`/v1/webhook-events/${encodeURIComponent(eventId)}`);
+  }
+
+  async listWebhookDeliveries(input: ListWebhookDeliveriesInput = {}): Promise<WebhookDelivery[]> {
+    return this.request(this.withQuery("/v1/webhook-deliveries", input));
+  }
+
+  async getWebhookDelivery(deliveryId: string): Promise<WebhookDelivery> {
+    return this.request(`/v1/webhook-deliveries/${encodeURIComponent(deliveryId)}`);
+  }
+
+  async attemptWebhookDelivery(deliveryId: string): Promise<WebhookDelivery> {
+    return this.request(`/v1/webhook-deliveries/${encodeURIComponent(deliveryId)}/attempt`, { method: "POST" });
+  }
+
+  async replayWebhookDelivery(deliveryId: string, input: ReplayWebhookDeliveryInput = {}): Promise<WebhookDelivery> {
+    return this.request(`/v1/webhook-deliveries/${encodeURIComponent(deliveryId)}/replay`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   }
 
   async setReceivingAddress(merchantId: string, input: SetReceivingAddressInput): Promise<ReceivingAddressRecord> {

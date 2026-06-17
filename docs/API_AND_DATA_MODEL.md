@@ -126,7 +126,17 @@ POST /v1/settlement/recheck/:intentId
 POST /v1/webhook-endpoints
 GET  /v1/webhook-endpoints
 POST /v1/webhook-endpoints/:id/test
+GET  /v1/webhook-events?merchantId=...
+GET  /v1/webhook-events/:eventId
+GET  /v1/webhook-deliveries?merchantId=...
+GET  /v1/webhook-deliveries/:deliveryId
+POST /v1/webhook-deliveries/:deliveryId/attempt
+POST /v1/webhook-deliveries/:deliveryId/replay
 ```
+
+`payment_intent.paid` events are written to the sandbox outbox when settlement proof or trusted EVM recheck moves a `PaymentIntent` to `paid`. Delivery attempts are signed with `X-RedeemLoop-Event-Id`, `X-RedeemLoop-Delivery-Id`, `X-RedeemLoop-Timestamp`, `X-RedeemLoop-Nonce`, and `X-RedeemLoop-Signature`.
+
+当 settlement proof 或可信 EVM recheck 将 `PaymentIntent` 推进到 `paid` 后，API 会把 `payment_intent.paid` event 写入 sandbox outbox。Delivery attempt 会使用 `X-RedeemLoop-Event-Id`、`X-RedeemLoop-Delivery-Id`、`X-RedeemLoop-Timestamp`、`X-RedeemLoop-Nonce` 和 `X-RedeemLoop-Signature` 签名。
 
 ## 2. 数据库表
 
@@ -272,18 +282,39 @@ created_at
 updated_at
 ```
 
-### webhook_deliveries
+### webhook_events
 
 ```text
 id
 event_id
-endpoint_id
-intent_id
+merchant_id
 event_type
 payload_json
+delivery_ids_json
+created_at
+updated_at
+```
+
+### webhook_deliveries
+
+```text
+id
+delivery_id
+event_id
+endpoint_id
+merchant_id
+event_type
+url
 status
 attempts
+max_attempts
+next_attempt_at
+last_attempt_at
+delivered_at
 last_error
+response_status
+response_body_json
+request_json
 created_at
 updated_at
 ```

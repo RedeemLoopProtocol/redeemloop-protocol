@@ -231,6 +231,60 @@ export interface TestWebhookEndpointResponse {
   };
 }
 
+export type WebhookDeliveryStatus = "pending" | "delivered" | "failed" | "dead_letter";
+
+export interface WebhookEvent {
+  eventId: string;
+  merchantId: string;
+  type: string;
+  payload: unknown;
+  deliveryIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WebhookDelivery {
+  deliveryId: string;
+  eventId: string;
+  endpointId: string;
+  merchantId: string;
+  eventType: string;
+  url: string;
+  status: WebhookDeliveryStatus;
+  attempts: number;
+  maxAttempts: number;
+  nextAttemptAt?: string;
+  lastAttemptAt?: string;
+  deliveredAt?: string;
+  lastError?: string;
+  responseStatus?: number;
+  responseBody?: unknown;
+  request?: {
+    method: "POST";
+    url: string;
+    headers: Record<string, string>;
+    body: unknown;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListWebhookEventsInput {
+  merchantId?: string;
+  type?: string;
+}
+
+export interface ListWebhookDeliveriesInput {
+  merchantId?: string;
+  eventId?: string;
+  endpointId?: string;
+  status?: WebhookDeliveryStatus;
+}
+
+export interface ReplayWebhookDeliveryInput {
+  attemptNow?: boolean;
+}
+
 export interface ReceivingAddressRecord {
   merchantId: string;
   chainId: number;
