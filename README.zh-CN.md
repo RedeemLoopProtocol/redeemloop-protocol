@@ -45,6 +45,7 @@ PaymentIntent
 - Fractal 和 Inscription/NFT adapter alpha boundaries：包含 mocked ownership 和 transfer proof tests。
 - POS QR 和直播短链 pilot APIs：回到 PaymentIntent reconciliation 主线。
 - Hosted Payment Page Alpha：支持带 token 的 POS QR 和短链 checkout URL。
+- Official Website and Scenario Model：用于 GitHub Pages 的双语项目官网，包含项目定位、商户场景、可用度状态和自定义域名说明。
 - Public Merchant Sandbox：Docker Compose、`.env.example`、环境检查和 API reference 文档。
 - Bitcoin Rune Wallet/Indexer Beta adapter surface：UniSat `sendRunes`、Xverse `runes_transfer`、基于 Xverse API 的 Rune balance/UTXO/activity 校验、API-level Rune settlement recheck，以及明确标注的 PSBT request fixture 边界。
 - 商户收券地址 / vault 确认模型。
@@ -85,6 +86,7 @@ packages/widget    面向非 React 店铺的 script-tag widget
 packages/contracts EVM ERC-20 提货资产示例合约
 services/api       binding、intent、proof、webhook、电商适配 API
 apps/pos-verifier  本地 Phase 0 控制台、hosted payment pages、POS QR 演示、demo store 页面、EVM live certification console 和 merchant admin console
+apps/site          用于 GitHub Pages 的双语静态官网和商户场景模型
 plugins/woocommerce WooCommerce sandbox payment gateway 插件
 docs/              v0.2 协议、边界、API、集成和施工文档
 whitepaper/        v0.2 白皮书源码和渲染文件
@@ -158,6 +160,14 @@ pnpm pos:dev
 6. 查看 dry-run mark-as-paid 适配输出。
 
 测试 hosted checkout 时，可以在 POS console 里创建 POS QR 或短链，并把 `Short Base URL` 设置成正在运行的支付页面地址，例如 `http://localhost:3000`。然后在支持钱包的浏览器打开生成的 `/pay/:intentId?token=...` 或 `/s/:slug?token=...` URL。Hosted page 使用 token-scoped public session API，用户不需要商户 API key。
+
+本地运行官网：
+
+```bash
+pnpm site:dev
+```
+
+打开 `http://localhost:3001`。静态官网位于 `apps/site`，可通过 GitHub Pages 部署。Pages 设置和可选 `redeemloop.aifund.com` 自定义域名路径见 [docs/WEBSITE_AND_PAGES.md](docs/WEBSITE_AND_PAGES.md)。
 
 对于 EVM ERC-20 提货资产，`Request Transfer` 会返回钱包可直接使用的 `transfer(merchantVault, requiredAmount)` 交易请求，包括合约地址、calldata、chain ID 和 `value: 0x0`。
 `Check Balance` 会返回钱包可直接使用的 `balanceOf(payer)` call request；如果传入余额，也会判断付款地址是否持有足够提货资产。

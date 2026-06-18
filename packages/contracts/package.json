@@ -1,7 +1,7 @@
 {
   "name": "@redeemloop/example-evm-erc20-voucher",
   "private": true,
-  "version": "0.9.0",
+  "version": "0.9.1",
   "license": "MIT",
   "scripts": {
     "build": "forge build",

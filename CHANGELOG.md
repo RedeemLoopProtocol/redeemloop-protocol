@@ -4,6 +4,28 @@
 
 No unreleased changes yet.
 
+## v0.9.1 - 2026-06-18
+
+### Added
+
+- Static official website app at `apps/site`.
+- Bilingual website content with a language toggle.
+- First-screen merchant scenario model for product checkout, POS QR, livestream short-link, and merchant operations.
+- Readiness matrix for EVM, WooCommerce, Shopify, Bitcoin Rune, Fractal, inscription, and NFT paths.
+- GitHub Pages deployment workflow at `.github/workflows/pages.yml`.
+- Website and custom-domain guide at `docs/WEBSITE_AND_PAGES.md`.
+- Root scripts `pnpm site:dev` and `pnpm site:build`.
+
+### 中文说明
+
+- 新增静态官网应用：`apps/site`。
+- 官网支持中英文双语内容和页面内语言切换。
+- 首屏新增商户应用场景模型，覆盖商品页 checkout、POS QR、直播短链和商户运营后台。
+- 新增 EVM、WooCommerce、Shopify、Bitcoin Rune、Fractal、Inscription、NFT 路径的可用度矩阵。
+- 新增 GitHub Pages 部署 workflow：`.github/workflows/pages.yml`。
+- 新增官网和自定义域名指南：`docs/WEBSITE_AND_PAGES.md`。
+- 根目录新增 `pnpm site:dev` 和 `pnpm site:build` 脚本。
+
 ## v0.9.0 - 2026-06-18
 
 ### Added

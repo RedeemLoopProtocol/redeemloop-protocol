@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  background: #f4f2eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(90deg, rgba(23, 26, 31, 0.05) 1px, transparent 1px),
+    linear-gradient(rgba(23, 26, 31, 0.04) 1px, transparent 1px),
+    #f4f2eb;
+  background-size: 42px 42px;
+  color: #171a1f;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(23, 107, 88, 0.22);
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink px-4 text-sm font-bold text-chalk transition hover:bg-pine active:translate-y-px;
+  }
+
+  .btn-secondary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-chalk px-4 text-sm font-bold text-ink transition hover:border-pine hover:text-pine active:translate-y-px;
+  }
+
+  .section-kicker {
+    @apply text-xs font-black uppercase tracking-[0.18em] text-rust;
+  }
+
+  .section-title {
+    @apply mt-3 max-w-4xl text-3xl font-black leading-tight tracking-normal text-ink sm:text-4xl;
+  }
+
+  .tab-button {
+    @apply grid h-11 min-w-0 place-items-center rounded-md border border-line bg-paper text-muted transition hover:border-pine hover:text-pine;
+  }
+
+  .tab-button-active {
+    @apply border-ink bg-ink text-chalk hover:border-ink hover:text-chalk;
+  }
+
+  .scenario-tile {
+    @apply min-h-[230px] rounded-lg border border-line bg-paper p-5 text-left transition hover:-translate-y-0.5 hover:border-pine hover:bg-chalk;
+  }
+
+  .scenario-tile-active {
+    @apply border-ink bg-chalk shadow-panel;
+  }
+
+  .footer-link {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-white/15 px-3 text-sm font-bold text-chalk/85 transition hover:border-brass hover:text-brass;
+  }
+}

@@ -45,6 +45,7 @@ This release fixes the first public implementation scope:
 - Fractal and Inscription/NFT adapter alpha boundaries with mocked ownership and transfer proof tests.
 - POS QR and livestream short-link pilot APIs backed by PaymentIntent reconciliation.
 - Hosted Payment Page Alpha for token-scoped POS QR and short-link checkout URLs.
+- Official Website and Scenario Model for GitHub Pages, with bilingual project positioning, merchant scenarios, readiness status, and custom-domain guidance.
 - Public Merchant Sandbox with Docker Compose, `.env.example`, environment checks, and API reference docs.
 - Bitcoin Rune Wallet/Indexer Beta adapter surface with UniSat `sendRunes`, Xverse `runes_transfer`, Xverse API-backed Rune balance/UTXO/activity verification, API-level Rune settlement recheck, and a clearly labeled PSBT request fixture boundary.
 - Merchant receiving address / vault confirmation model.
@@ -85,6 +86,7 @@ packages/widget    Script-tag widget for non-React merchant stores
 packages/contracts EVM ERC-20 voucher example contracts only
 services/api       Fastify API for bindings, intents, proofs, webhooks, commerce adapters
 apps/pos-verifier  Local Phase 0 console, hosted payment pages, POS-style QR demo, demo store page, EVM live certification console, and merchant admin console
+apps/site          Static bilingual official website and merchant scenario model for GitHub Pages
 plugins/woocommerce WooCommerce sandbox payment gateway plugin
 docs/              v0.2 protocol, boundary, API, integration, and construction docs
 whitepaper/        v0.2 whitepaper source and rendered files
@@ -158,6 +160,14 @@ Open `http://localhost:3000`, keep the API at `http://localhost:8787`, then run:
 6. Review the dry-run mark-as-paid adapter output.
 
 For hosted checkout testing, use the POS console to create a POS QR or short link with `Short Base URL` set to the running payment app, for example `http://localhost:3000`. Open the generated `/pay/:intentId?token=...` or `/s/:slug?token=...` URL in a wallet-enabled browser. The hosted page uses token-scoped public session APIs, so customers do not need the merchant API key.
+
+Run the official website locally:
+
+```bash
+pnpm site:dev
+```
+
+Open `http://localhost:3001`. The static website is published from `apps/site` and can be deployed through GitHub Pages. See [docs/WEBSITE_AND_PAGES.md](docs/WEBSITE_AND_PAGES.md) for Pages setup and the optional `redeemloop.aifund.com` custom-domain path.
 
 For EVM ERC-20 voucher assets, `Request Transfer` returns a wallet-ready `transfer(merchantVault, requiredAmount)` transaction request with contract address, calldata, chain ID, and `value: 0x0`.
 `Check Balance` returns a wallet-ready `balanceOf(payer)` call request and, when a balance is supplied, evaluates whether the payer holds enough voucher assets.
