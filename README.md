@@ -37,7 +37,7 @@ This release fixes the first public implementation scope:
 - WooCommerce sandbox payment gateway plugin.
 - Webhook event outbox, signed delivery attempts, retry state, dead-letter status, and replay API.
 - Public Merchant Sandbox with Docker Compose, `.env.example`, environment checks, and API reference docs.
-- Bitcoin Rune Interface Alpha with UniSat/Xverse-style wallet interfaces, Rune indexer interface, mocked indexer, and PSBT request fixture boundary.
+- Bitcoin Rune Wallet/Indexer Beta adapter surface with UniSat `sendRunes`, Xverse `runes_transfer`, Xverse API-backed Rune balance/UTXO/activity verification, and a clearly labeled PSBT request fixture boundary.
 - Merchant receiving address / vault confirmation model.
 - Settlement proof submission and idempotency.
 - WooCommerce, Shopify, and custom mark-as-paid adapter surface.
@@ -69,7 +69,7 @@ RedeemLoop does not:
 
 ```text
 packages/core      Protocol types, validators, PaymentIntent state machine
-packages/adapters  EVM, PSBT, wallet, and indexer adapter interfaces
+packages/adapters  EVM, Bitcoin Rune wallet/indexer adapters, PSBT fixture boundary, and shared adapter interfaces
 packages/sdk       TypeScript API client
 packages/react     React provider and Pay Button for merchant embeds
 packages/widget    Script-tag widget for non-React merchant stores
@@ -294,6 +294,7 @@ manual_review
 - [Integration Guide](docs/INTEGRATION_GUIDE.md)
 - [Public Merchant Sandbox](docs/PUBLIC_SANDBOX.md)
 - [Bitcoin Rune Alpha](docs/BITCOIN_RUNE_ALPHA.md)
+- [Bitcoin Rune Real-Usability Plan](docs/BITCOIN_RUNE_REAL_USABILITY.md)
 - [API Reference](docs/API_REFERENCE.md)
 - [Commerce Adapters](docs/COMMERCE_ADAPTERS.md)
 - [API and Data Model](docs/API_AND_DATA_MODEL.md)
@@ -339,7 +340,7 @@ PaymentIntent
 - WooCommerce sandbox payment gateway plugin。
 - Webhook event outbox、签名投递、重试状态、dead-letter 状态和 replay API。
 - Public Merchant Sandbox：Docker Compose、`.env.example`、环境检查和 API reference 文档。
-- Bitcoin Rune Interface Alpha：UniSat/Xverse 风格钱包接口、Rune indexer interface、mock indexer 和 PSBT request fixture 边界。
+- Bitcoin Rune Wallet/Indexer Beta adapter surface：UniSat `sendRunes`、Xverse `runes_transfer`、基于 Xverse API 的 Rune balance/UTXO/activity 校验，以及明确标注的 PSBT request fixture 边界。
 - 商户收券地址 / vault 确认模型。
 - Settlement proof 提交与幂等。
 - WooCommerce、Shopify、自定义 mark-as-paid 适配表面。
@@ -371,7 +372,7 @@ RedeemLoop 不做：
 
 ```text
 packages/core      协议类型、校验器、PaymentIntent 状态机
-packages/adapters  EVM、PSBT、钱包、索引器 adapter interfaces
+packages/adapters  EVM、Bitcoin Rune 钱包/索引器 adapters、PSBT fixture 边界和通用 adapter interfaces
 packages/sdk       TypeScript API client
 packages/react     面向商户嵌入的 React provider 和 Pay Button
 packages/widget    面向非 React 店铺的 script-tag widget
@@ -501,6 +502,7 @@ manual_review
 - [集成指南](docs/INTEGRATION_GUIDE.md)
 - [Public Merchant Sandbox](docs/PUBLIC_SANDBOX.md)
 - [Bitcoin Rune Alpha](docs/BITCOIN_RUNE_ALPHA.md)
+- [Bitcoin Rune Real-Usability Plan](docs/BITCOIN_RUNE_REAL_USABILITY.md)
 - [API Reference](docs/API_REFERENCE.md)
 - [电商适配](docs/COMMERCE_ADAPTERS.md)
 - [API 与数据模型](docs/API_AND_DATA_MODEL.md)

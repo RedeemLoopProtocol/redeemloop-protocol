@@ -213,8 +213,12 @@ interface PsbtBuilderAdapter {
 
 interface BitcoinWalletAdapter {
   connect(): Promise<WalletAccount>;
-  signPsbt(psbtBase64: string): Promise<string>;
-  broadcast?(signedPsbtBase64: string): Promise<string>;
+  signPsbt(input: { psbtBase64?: string; psbtHex?: string; signInputs?: Record<string, number[]> }): Promise<{
+    psbtBase64?: string;
+    psbtHex?: string;
+    txid?: string;
+  }>;
+  broadcast?(signedPsbt: string): Promise<string>;
 }
 
 interface IndexerAdapter {

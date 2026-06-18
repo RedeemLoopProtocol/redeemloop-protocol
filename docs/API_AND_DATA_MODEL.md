@@ -1,4 +1,4 @@
-# RedeemLoop API 与数据模型 v0.4
+# RedeemLoop API 与数据模型 v0.4.1
 
 ## 1. REST API
 
@@ -112,7 +112,7 @@ POST /v1/payment-intents/:intentId/cancel
 
 客户端应把 `transaction.to` 作为 ERC-20 合约地址，把 `transaction.data` 作为 calldata，引导用户钱包把指定数量的已有提货资产转入商户收券地址。
 
-对于 Bitcoin / Fractal Rune alpha 资产，`transfer-requested` 在请求体提供 `runeUtxos` 时返回 `transfer.bitcoin.psbtBase64`。该值是 wallet adapter integration test 的 PSBT request fixture boundary，不代表生产级 live PSBT engine。
+对于 Bitcoin / Fractal Rune 资产，`transfer-requested` 在请求体提供 `runeUtxos` 时返回 `transfer.bitcoin.psbtBase64`。该值仍是 wallet adapter integration test 的 PSBT request fixture boundary，不代表生产级 live PSBT engine。v0.4.1 真实钱包集成应优先使用 adapter 层 UniSat `sendRunes` 或 Xverse `runes_transfer`，再通过 `RuneIndexerAdapter` 提交收券 proof。
 
 ### Settlement
 

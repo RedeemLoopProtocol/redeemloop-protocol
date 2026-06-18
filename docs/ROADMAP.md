@@ -12,9 +12,11 @@ This roadmap is the public product direction after the v0.2 Phase 0 realignment.
 ## Phase 1
 
 - Bitcoin Rune payment adapter.
-- UniSat / Xverse wallet adapter.
-- Rune indexer adapter.
-- PSBT builder.
+- UniSat / Xverse wallet adapter using wallet-native transfer methods.
+- Rune indexer adapter, starting with Xverse API-backed balance, UTXO, and activity proof lookup.
+- Production PSBT builder remains a later hardening target; v0.4.1 keeps PSBT output as a fixture boundary.
+
+Current status: v0.4.1 provides beta integration support, not live-certified production support.
 
 ## Phase 2
 

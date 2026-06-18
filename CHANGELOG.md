@@ -4,6 +4,35 @@
 
 No unreleased changes yet.
 
+## v0.4.1 - 2026-06-18
+
+### Added
+
+- UniSat Rune wallet adapter factory with `requestAccounts`, `getPublicKey`, `getChain`/`getNetwork`, `sendRunes`, `signPsbt`, and `pushPsbt` integration surfaces.
+- Xverse Sats Connect wallet adapter factory with `getAddresses`, `signPsbt`, and `runes_transfer` integration surfaces.
+- Direct wallet-native Rune transfer helper through `requestRuneTransfer`.
+- Explicit PSBT semantics: UniSat uses hex PSBTs; Xverse uses base64 PSBTs.
+- Xverse API-backed Rune indexer adapter for balance, UTXO, and activity-based transfer proof lookup.
+- Deterministic adapter tests for UniSat transfer payloads, Xverse transfer payloads, and Xverse indexer response mapping.
+- Bilingual Bitcoin Rune real-usability plan.
+
+### Changed
+
+- Bitcoin Rune support is now documented as wallet/indexer beta integration support rather than a fixture-only alpha.
+- The existing API `transfer.bitcoin.psbtBase64` remains clearly labeled as a PSBT fixture boundary, not a production PSBT engine.
+
+### 中文说明
+
+- 新增 UniSat Rune wallet adapter factory，覆盖 `requestAccounts`、`getPublicKey`、`getChain`/`getNetwork`、`sendRunes`、`signPsbt` 和 `pushPsbt` 集成表面。
+- 新增 Xverse Sats Connect wallet adapter factory，覆盖 `getAddresses`、`signPsbt` 和 `runes_transfer` 集成表面。
+- 新增通过 `requestRuneTransfer` 发起钱包原生 Rune 转账的 helper。
+- 明确 PSBT 语义：UniSat 使用 hex PSBT，Xverse 使用 base64 PSBT。
+- 新增基于 Xverse API 的 Rune indexer adapter，支持 balance、UTXO 和 activity-based transfer proof lookup。
+- 新增确定性 adapter 测试，覆盖 UniSat 转账 payload、Xverse 转账 payload 和 Xverse indexer response mapping。
+- 新增双语 Bitcoin Rune 真实可用度计划。
+- Bitcoin Rune 支持现在表述为钱包/索引器 beta integration support，而不是仅有 fixture 的 alpha。
+- 现有 API `transfer.bitcoin.psbtBase64` 仍明确标注为 PSBT fixture boundary，不是生产级 PSBT engine。
+
 ## v0.4.0 - 2026-06-18
 
 ### Added
