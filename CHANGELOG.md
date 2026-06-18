@@ -4,6 +4,26 @@
 
 No unreleased changes yet.
 
+## v0.8.0 - 2026-06-18
+
+### Added
+
+- POS QR PaymentIntent API with terminal nonce replay protection.
+- Short-link PaymentIntent API and slug resolver.
+- SDK helpers for POS QR and short-link flows.
+- Persistence for short links and terminal payment nonces.
+- Terminal-scoped POS audit events.
+- Bilingual POS QR and short-link pilot guide.
+
+### 中文说明
+
+- 新增 POS QR PaymentIntent API，支持 terminal nonce 防重放。
+- 新增短链 PaymentIntent API 和 slug resolver。
+- SDK 新增 POS QR 和短链流程 helper。
+- 短链和 terminal payment nonce 支持持久化。
+- 新增 terminal-scoped POS audit events。
+- 新增双语 POS QR 和短链 pilot guide。
+
 ## v0.7.0 - 2026-06-18
 
 ### Added

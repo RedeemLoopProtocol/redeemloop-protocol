@@ -1,4 +1,4 @@
-# RedeemLoop Integration Guide v0.7.0 / 集成指南 v0.7.0
+# RedeemLoop Integration Guide v0.8.0 / 集成指南 v0.8.0
 
 ## English
 
@@ -29,6 +29,7 @@ For Shopify private-app mark-as-paid alpha support, see [Shopify Mark-as-Paid Ad
 For ETH/BSC/POL/ARB wallet support, see [EVM Multi-Chain Wallet Beta](EVM_MULTI_CHAIN_WALLET.md) and [EVM Live Certification Runbook](EVM_LIVE_CERTIFICATION.md).
 For Bitcoin Rune wallet/indexer beta support and certification-track hardening, see [Bitcoin Rune Alpha](BITCOIN_RUNE_ALPHA.md), [Bitcoin Rune Real-Usability Plan](BITCOIN_RUNE_REAL_USABILITY.md), and [Rune Production Certification Track](RUNE_CERTIFICATION_TRACK.md).
 For Fractal and Inscription/NFT adapter alpha boundaries, see [Fractal and Inscription/NFT Adapter Alpha](FRACTAL_INSCRIPTION_ALPHA.md).
+For POS QR and livestream short-link pilot APIs, see [POS QR and Short-Link Pilot](POS_QR_SHORT_LINK_PILOT.md).
 
 ### 2.1 Bitcoin Rune Wallet Path
 
@@ -327,6 +328,7 @@ Shopify private-app mark-as-paid alpha 支持请见 [Shopify Mark-as-Paid Adapte
 ETH/BSC/POL/ARB 钱包支持请见 [EVM Multi-Chain Wallet Beta](EVM_MULTI_CHAIN_WALLET.md) 和 [EVM Live Certification Runbook](EVM_LIVE_CERTIFICATION.md)。
 Bitcoin Rune 钱包/索引器 beta 支持和认证轨道加固请见 [Bitcoin Rune Alpha](BITCOIN_RUNE_ALPHA.md)、[Bitcoin Rune Real-Usability Plan](BITCOIN_RUNE_REAL_USABILITY.md) 和 [Rune Production Certification Track](RUNE_CERTIFICATION_TRACK.md)。
 Fractal 和 Inscription/NFT adapter alpha boundaries 请见 [Fractal and Inscription/NFT Adapter Alpha](FRACTAL_INSCRIPTION_ALPHA.md)。
+POS QR 和直播短链 pilot API 请见 [POS QR and Short-Link Pilot](POS_QR_SHORT_LINK_PILOT.md)。
 
 ### 2.1 Bitcoin Rune 钱包路径
 

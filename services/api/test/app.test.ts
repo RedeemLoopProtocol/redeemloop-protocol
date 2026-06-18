@@ -1403,6 +1403,113 @@ describe("RedeemLoop API relayer prototype", () => {
     await app.close();
   });
 
+  it("creates POS QR PaymentIntents with terminal-scoped nonce replay protection", async () => {
+    const app = await createApp({ chainId: 31337, dryRun: true });
+    await registerTerminal(app);
+    const bindingId = await createEvmBinding(app, "pos_qr", "pos", "tokyo-store-001");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/pos/payment-intents",
+      payload: {
+        bindingId,
+        storeId: "tokyo-store-001",
+        terminalId: "pos-07",
+        terminalNonce: "nonce-1",
+        orderId: "POS-1001",
+        payerAddress: user.address,
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      paymentIntent: {
+        channel: "pos",
+        orderId: "POS-1001",
+        status: "created",
+      },
+      qr: {
+        kind: "redeemloop.pos.payment",
+        terminalId: "pos-07",
+        terminalNonce: "nonce-1",
+      },
+    });
+
+    const replay = await app.inject({
+      method: "POST",
+      url: "/v1/pos/payment-intents",
+      payload: {
+        bindingId,
+        storeId: "tokyo-store-001",
+        terminalId: "pos-07",
+        terminalNonce: "nonce-1",
+        orderId: "POS-1001-REPLAY",
+      },
+    });
+    expect(replay.statusCode).toBe(409);
+    expect(replay.json().error).toContain("nonce");
+
+    const audit = await app.inject({
+      method: "GET",
+      url: "/v1/audit-logs?merchantId=coca-cola-japan&action=payment_intent.pos_qr_created",
+    });
+    expect(audit.statusCode).toBe(200);
+    expect(audit.json()).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it("creates and resolves livestream short-link PaymentIntents", async () => {
+    const app = await createApp({ chainId: 31337, dryRun: true });
+    const bindingId = await createEvmBinding(app, "short_link", "livestream", "live-store");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/short-links/payment-intents",
+      payload: {
+        bindingId,
+        slug: "live-drop",
+        baseUrl: "https://pay.example",
+        channel: "livestream",
+        orderId: "LIVE-1001",
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      paymentIntent: {
+        channel: "livestream",
+        orderId: "LIVE-1001",
+      },
+      shortLink: {
+        slug: "live-drop",
+        url: "https://pay.example/s/live-drop",
+      },
+    });
+
+    const resolved = await app.inject({
+      method: "GET",
+      url: "/v1/short-links/live-drop",
+    });
+    expect(resolved.statusCode).toBe(200);
+    expect(resolved.json()).toMatchObject({
+      shortLink: { slug: "live-drop" },
+      paymentIntent: { channel: "livestream" },
+    });
+
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/v1/short-links/payment-intents",
+      payload: {
+        bindingId,
+        slug: "live-drop",
+      },
+    });
+    expect(duplicate.statusCode).toBe(409);
+
+    await app.close();
+  });
+
   it("rejects invalid signatures before accepting a redemption submission", async () => {
     const app = await createApp({ chainId: 31337, dryRun: true });
     await registerTerminal(app);
@@ -1878,6 +1985,76 @@ async function createRunePaymentIntent(app: Awaited<ReturnType<typeof createApp>
   });
   expect(intentResponse.statusCode).toBe(201);
   return intentResponse.json().intentId as string;
+}
+
+async function createEvmBinding(
+  app: Awaited<ReturnType<typeof createApp>>,
+  suffix: string,
+  platform: "pos" | "livestream" | "woocommerce" | "shopify" | "custom",
+  storeId: string,
+): Promise<string> {
+  const merchantId = "coca-cola-japan";
+  const entitlementId = `ent_${suffix}`;
+  const bindingId = `bind_${suffix}`;
+  await app.inject({
+    method: "POST",
+    url: "/v1/merchants",
+    payload: {
+      merchantId,
+      name: "Coca-Cola Japan",
+    },
+  });
+  await app.inject({
+    method: "POST",
+    url: "/v1/merchant-vaults",
+    payload: {
+      vaultId: `vault_${suffix}`,
+      merchantId,
+      chainNamespace: "eip155",
+      chainId: 31337,
+      address: operator,
+    },
+  });
+  await app.inject({
+    method: "POST",
+    url: "/v1/entitlements",
+    payload: {
+      entitlementId,
+      merchantId,
+      name: "Pilot pickup",
+      quantity: 1,
+      termsHash: "pos-terms",
+    },
+  });
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/bindings",
+    payload: {
+      bindingId,
+      merchantId,
+      entitlementId,
+      acceptedAssets: [
+        {
+          chainNamespace: "eip155",
+          chainId: 31337,
+          assetType: "erc20",
+          assetId: `eip155:31337/erc20:${token}`,
+          contract: token,
+          requiredAmount: "1",
+          termsHash: "pos-terms",
+        },
+      ],
+      merchantVaults: {
+        "eip155:31337": operator,
+      },
+      settlementPolicy: "collect",
+      commerceTargets: [{ platform, storeId, sku: `${suffix}-sku` }],
+      status: "active",
+      termsHash: "pos-terms",
+    },
+  });
+  expect(response.statusCode).toBe(201);
+  return bindingId;
 }
 
 function commercePayload(overrides: Record<string, unknown> = {}) {

@@ -51,6 +51,9 @@ describe("RedeemLoopClient", () => {
     await client.verifyMerchantVaultSignature("vault_test", { signature: "0xsig", message: "challenge" });
     await client.expireStalePaymentIntents({ merchantId: "merchant_cafe" });
     await client.listPaymentIntents({ merchantId: "merchant_cafe" });
+    await client.createPosPaymentIntent({ bindingId: "bind_test", terminalId: "pos-07", terminalNonce: "nonce-1" });
+    await client.createShortLinkPaymentIntent({ bindingId: "bind_test", slug: "live-drop" });
+    await client.getShortLink("live-drop");
     await client.connectWallet("pi_test", { payerAddress: "0x0000000000000000000000000000000000000123" });
     await client.checkBalance("pi_test", {
       payerAddress: "0x0000000000000000000000000000000000000123",
@@ -91,6 +94,9 @@ describe("RedeemLoopClient", () => {
       "https://api.example.test/v1/merchant-vaults/vault_test/verify-signature",
       "https://api.example.test/v1/payment-intents/expire-stale",
       "https://api.example.test/v1/payment-intents?merchantId=merchant_cafe",
+      "https://api.example.test/v1/pos/payment-intents",
+      "https://api.example.test/v1/short-links/payment-intents",
+      "https://api.example.test/v1/short-links/live-drop",
       "https://api.example.test/v1/payment-intents/pi_test/connect-wallet",
       "https://api.example.test/v1/payment-intents/pi_test/check-balance",
       "https://api.example.test/v1/payment-intents/pi_test/transfer-requested",

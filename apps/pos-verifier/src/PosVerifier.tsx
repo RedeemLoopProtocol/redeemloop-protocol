@@ -17,7 +17,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { getAddress, isAddress } from "viem";
 
 import { createPaymentLink, shortenHash } from "./redeemLink";
-import type { BalanceCheckResponse, BindingResponse, CommerceProvider, PaymentIntentResponse, SettlementProofResponse } from "./types";
+import type { BalanceCheckResponse, BindingResponse, CommerceProvider, PaymentIntentResponse, PosPaymentIntentResponse, SettlementProofResponse, ShortLinkPaymentIntentResponse } from "./types";
 
 type StepStatus = "idle" | "busy" | "done" | "error";
 
@@ -37,6 +37,10 @@ interface FormState {
   commerceProvider: CommerceProvider;
   storeId: string;
   orderId: string;
+  terminalId: string;
+  terminalNonce: string;
+  shortSlug: string;
+  shortBaseUrl: string;
   payerAddress: string;
   walletBalance: string;
   txid: string;
@@ -58,6 +62,10 @@ const initialForm: FormState = {
   commerceProvider: "woocommerce",
   storeId: "woo-store",
   orderId: "42",
+  terminalId: "pos-07",
+  terminalNonce: "nonce-1",
+  shortSlug: "live-drop",
+  shortBaseUrl: "https://pay.example",
   payerAddress: "0x0000000000000000000000000000000000000123",
   walletBalance: "1",
   txid: "0x1234",
@@ -71,6 +79,8 @@ export function PosVerifier() {
   const [balanceCheck, setBalanceCheck] = useState<BalanceCheckResponse["balanceCheck"] | null>(null);
   const [transferRequest, setTransferRequest] = useState<PaymentIntentResponse["transfer"] | null>(null);
   const [proof, setProof] = useState<SettlementProofResponse | null>(null);
+  const [posQr, setPosQr] = useState<PosPaymentIntentResponse["qr"] | null>(null);
+  const [shortLink, setShortLink] = useState<ShortLinkPaymentIntentResponse["shortLink"] | null>(null);
   const [status, setStatus] = useState<Record<string, StepStatus>>({
     binding: "idle",
     wallet: "idle",
@@ -79,6 +89,10 @@ export function PosVerifier() {
     transfer: "idle",
     proof: "idle",
     payButton: "idle",
+    terminal: "idle",
+    posQr: "idle",
+    shortLink: "idle",
+    poll: "idle",
   });
   const [error, setError] = useState<string>("");
 
@@ -187,7 +201,66 @@ export function PosVerifier() {
     });
   }
 
-  async function createAssetBindingRequest() {
+  async function registerTerminal() {
+    await runStep("terminal", async () => {
+      await postJson("/v1/terminals/register", {
+        merchantId: form.merchantId,
+        storeId: form.storeId,
+        terminalId: form.terminalId,
+        operatorWallet: form.merchantVault,
+      });
+    });
+  }
+
+  async function createPosQrIntent() {
+    await runStep("posQr", async () => {
+      const activeBinding = binding ?? (await createAssetBindingRequest("pos"));
+      setBinding(activeBinding);
+      await postJson("/v1/terminals/register", {
+        merchantId: form.merchantId,
+        storeId: form.storeId,
+        terminalId: form.terminalId,
+        operatorWallet: form.merchantVault,
+      });
+      const created = await postJson<PosPaymentIntentResponse>("/v1/pos/payment-intents", {
+        bindingId: activeBinding.bindingId,
+        storeId: form.storeId,
+        terminalId: form.terminalId,
+        terminalNonce: form.terminalNonce,
+        orderId: form.orderId,
+        payerAddress: effectivePayer,
+      });
+      setIntent(created.paymentIntent);
+      setPosQr(created.qr);
+    });
+  }
+
+  async function createShortLinkIntent() {
+    await runStep("shortLink", async () => {
+      const activeBinding = binding ?? (await createAssetBindingRequest("livestream"));
+      setBinding(activeBinding);
+      const created = await postJson<ShortLinkPaymentIntentResponse>("/v1/short-links/payment-intents", {
+        bindingId: activeBinding.bindingId,
+        slug: form.shortSlug,
+        baseUrl: form.shortBaseUrl,
+        channel: "livestream",
+        orderId: form.orderId,
+        payerAddress: effectivePayer,
+      });
+      setIntent(created.paymentIntent);
+      setShortLink(created.shortLink);
+    });
+  }
+
+  async function refreshPaymentIntent() {
+    await runStep("poll", async () => {
+      if (!intent) throw new Error("No PaymentIntent to refresh.");
+      const response = await fetch(`${form.apiBaseUrl}/v1/payment-intents/${encodeURIComponent(intent.intentId)}`);
+      setIntent((await assertOk(response)) as PaymentIntentResponse);
+    });
+  }
+
+  async function createAssetBindingRequest(platformOverride?: CommerceProvider | "pos" | "livestream") {
     const bindingId = `bind_${safeId(form.merchantId)}_${safeId(form.sku)}`;
 
     await postJson("/v1/merchants", {
@@ -229,7 +302,7 @@ export function PosVerifier() {
       settlementPolicy: "collect",
       commerceTargets: [
         {
-          platform: form.commerceProvider,
+          platform: platformOverride ?? form.commerceProvider,
           storeId: form.storeId,
           sku: form.sku,
         },
@@ -373,6 +446,22 @@ export function PosVerifier() {
                 <input className="input" value={form.orderId} onChange={(event) => updateField("orderId", event.target.value)} />
               </Field>
             </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Terminal ID">
+                <input className="input" value={form.terminalId} onChange={(event) => updateField("terminalId", event.target.value)} />
+              </Field>
+              <Field label="Terminal Nonce">
+                <input className="input" value={form.terminalNonce} onChange={(event) => updateField("terminalNonce", event.target.value)} />
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Short Slug">
+                <input className="input" value={form.shortSlug} onChange={(event) => updateField("shortSlug", event.target.value)} />
+              </Field>
+              <Field label="Short Base URL">
+                <input className="input" value={form.shortBaseUrl} onChange={(event) => updateField("shortBaseUrl", event.target.value)} />
+              </Field>
+            </div>
             <Field label="Terms Hash or Terms Key">
               <input className="input" value={form.termsHash} onChange={(event) => updateField("termsHash", event.target.value)} />
             </Field>
@@ -428,6 +517,33 @@ export function PosVerifier() {
                 {form.commerceProvider} / {form.orderId || "order"}
               </p>
             </ActionPanel>
+            <ActionPanel
+              icon={<QrCode size={24} weight="duotone" aria-hidden />}
+              title="POS QR"
+              status={status.posQr}
+              primaryLabel="Create"
+              onPrimary={createPosQrIntent}
+            >
+              <p className="break-all text-sm leading-6 text-zinc-600">{posQr ? posQr.terminalNonce : "Register terminal and create QR"}</p>
+            </ActionPanel>
+            <ActionPanel
+              icon={<LinkSimple size={24} weight="duotone" aria-hidden />}
+              title="Short Link"
+              status={status.shortLink}
+              primaryLabel="Create"
+              onPrimary={createShortLinkIntent}
+            >
+              <p className="break-all text-sm leading-6 text-zinc-600">{shortLink ? shortLink.url : "Livestream payment link"}</p>
+            </ActionPanel>
+            <ActionPanel
+              icon={<ShieldCheck size={24} weight="duotone" aria-hidden />}
+              title="Terminal"
+              status={status.terminal}
+              primaryLabel="Register"
+              onPrimary={registerTerminal}
+            >
+              <p className="break-all text-sm leading-6 text-zinc-600">{form.storeId} / {form.terminalId}</p>
+            </ActionPanel>
           </div>
 
           <div className="rounded-lg border border-line bg-white/90 p-5 shadow-panel backdrop-blur sm:p-6">
@@ -451,7 +567,9 @@ export function PosVerifier() {
 
               <div className="w-full min-w-0 rounded-lg border border-line bg-field p-4 lg:w-[280px]">
                 <div className="grid place-items-center rounded-md bg-white p-4">
-                  {paymentLink ? (
+                  {posQr ? (
+                    <QRCodeSVG value={JSON.stringify(posQr)} size={196} marginSize={2} fgColor="#171a1f" bgColor="#ffffff" />
+                  ) : paymentLink ? (
                     <QRCodeSVG value={paymentLink} size={196} marginSize={2} fgColor="#171a1f" bgColor="#ffffff" />
                   ) : (
                     <div className="grid h-[196px] w-[196px] place-items-center border border-dashed border-line bg-field text-center text-sm text-zinc-500">
@@ -461,8 +579,11 @@ export function PosVerifier() {
                 </div>
                 <div className="mt-4 flex items-start gap-2 text-xs text-zinc-600">
                   <LinkSimple size={16} weight="duotone" className="mt-0.5 shrink-0" aria-hidden />
-                  <p className="break-all font-mono">{paymentLink || "redeemloop://pay"}</p>
+                  <p className="break-all font-mono">{posQr ? posQr.paymentUrl : shortLink ? shortLink.url : paymentLink || "redeemloop://pay"}</p>
                 </div>
+                <button className="btn-secondary mt-4 w-full" onClick={refreshPaymentIntent} disabled={!intent || status.poll === "busy"}>
+                  Refresh status
+                </button>
               </div>
             </div>
           </div>

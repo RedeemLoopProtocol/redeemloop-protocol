@@ -1,4 +1,4 @@
-# RedeemLoop API Reference v0.7.0
+# RedeemLoop API Reference v0.8.0
 
 ## English
 
@@ -48,6 +48,9 @@ POST /v1/payment-intents/:intentId/transfer-requested
 POST /v1/payment-intents/:intentId/broadcasted
 POST /v1/payment-intents/:intentId/cancel
 POST /v1/payment-intents/expire-stale
+POST /v1/pos/payment-intents
+POST /v1/short-links/payment-intents
+GET  /v1/short-links/:slug
 ```
 
 For Bitcoin Rune assets, `transfer-requested` accepts `network`, `feeRate`, `changeAddress`, `payerPublicKey`, and `runeUtxos`, then returns `transfer.bitcoin.psbtBase64`. This API response remains a PSBT fixture boundary. Real wallet flows should prefer the adapter-level UniSat `sendRunes` or Xverse `runes_transfer` path, then submit indexer-backed proof.
@@ -151,6 +154,9 @@ POST /v1/payment-intents/:intentId/transfer-requested
 POST /v1/payment-intents/:intentId/broadcasted
 POST /v1/payment-intents/:intentId/cancel
 POST /v1/payment-intents/expire-stale
+POST /v1/pos/payment-intents
+POST /v1/short-links/payment-intents
+GET  /v1/short-links/:slug
 ```
 
 对于 Bitcoin Rune 资产，`transfer-requested` 可接收 `network`、`feeRate`、`changeAddress`、`payerPublicKey` 和 `runeUtxos`，并返回 `transfer.bitcoin.psbtBase64`。该 API 响应仍是 PSBT fixture boundary。真实钱包流程应优先使用 adapter 层 UniSat `sendRunes` 或 Xverse `runes_transfer` 路径，然后提交 indexer-backed proof。

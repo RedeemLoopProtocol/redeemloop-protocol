@@ -18,7 +18,9 @@ export interface RedeemLoopApiSnapshot {
   webhookEvents?: unknown[];
   webhookDeliveries?: unknown[];
   auditLogs?: unknown[];
+  shortLinks?: unknown[];
   registeredTerminals: string[];
+  terminalPaymentNonces?: string[];
   redemptionSubmissions: string[];
 }
 

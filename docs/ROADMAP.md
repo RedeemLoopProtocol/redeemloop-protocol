@@ -44,6 +44,7 @@ Current status: v0.7.0 provides mocked alpha adapter boundaries, not live-certif
 - Mini-program SDK.
 
 Current status: v0.7.0 provides generic mocked ownership/transfer proof boundaries for inscription, ERC-721, and ERC-1155 voucher assets.
+Current status: v0.8.0 adds POS QR and livestream short-link pilot APIs backed by the same PaymentIntent reconciliation model.
 
 ## Phase 4
 

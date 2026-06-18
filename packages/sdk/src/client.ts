@@ -10,6 +10,8 @@ import type {
   CreateMerchantInput,
   CreateMerchantVaultInput,
   CreatePaymentIntentInput,
+  CreatePosPaymentIntentInput,
+  CreateShortLinkPaymentIntentInput,
   CreateSettlementProofInput,
   CreateWebhookEndpointInput,
   DrainWebhookDeliveriesInput,
@@ -35,6 +37,7 @@ import type {
   SelectAssetInput,
   SetReceivingAddressInput,
   ShopifyDiagnosticsResponse,
+  ShortLinkPaymentIntentResponse,
   SettlementProofResponse,
   SettlementRecheckResponse,
   TestWebhookEndpointResponse,
@@ -46,6 +49,7 @@ import type {
   WebhookDelivery,
   WebhookEndpoint,
   WebhookEvent,
+  PosPaymentIntentResponse,
 } from "./types.js";
 import type { Entitlement, RedeemLoopPaymentIntent, RedemptionBinding } from "@redeemloop/core";
 
@@ -145,6 +149,24 @@ export class RedeemLoopClient {
       method: "POST",
       body: JSON.stringify(input),
     });
+  }
+
+  async createPosPaymentIntent(input: CreatePosPaymentIntentInput): Promise<PosPaymentIntentResponse> {
+    return this.request("/v1/pos/payment-intents", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async createShortLinkPaymentIntent(input: CreateShortLinkPaymentIntentInput): Promise<ShortLinkPaymentIntentResponse> {
+    return this.request("/v1/short-links/payment-intents", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async getShortLink(slug: string): Promise<ShortLinkPaymentIntentResponse> {
+    return this.request(`/v1/short-links/${encodeURIComponent(slug)}`);
   }
 
   async expireStalePaymentIntents(input: ExpireStalePaymentIntentsInput = {}): Promise<ExpireStalePaymentIntentsResponse> {

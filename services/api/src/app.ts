@@ -245,6 +245,16 @@ interface CommercePaymentRecord {
   updatedAt: string;
 }
 
+interface ShortPaymentLinkRecord {
+  slug: string;
+  intentId: string;
+  merchantId: string;
+  channel: "website" | "checkout" | "pos" | "miniapp" | "livestream" | "ad";
+  url: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 const voucherAbi = parseAbi([
   "function collectWithAuthorization((address user,address voucherToken,uint256 tokenId,uint256 amount,bytes32 merchantId,bytes32 storeId,bytes32 terminalId,bytes32 termsHash,uint8 redemptionMode,uint256 nonce,uint256 deadline) authorization, bytes signature) returns (bytes32)",
   "function burnWithAuthorization((address user,address voucherToken,uint256 tokenId,uint256 amount,bytes32 merchantId,bytes32 storeId,bytes32 terminalId,bytes32 termsHash,uint8 redemptionMode,uint256 nonce,uint256 deadline) authorization, bytes signature) returns (bytes32)",
@@ -254,9 +264,11 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
   const app = Fastify({ logger: false });
   let schedulePersist = () => {};
   const registeredTerminals = new PersistentSet<string>(() => schedulePersist());
+  const terminalPaymentNonces = new PersistentSet<string>(() => schedulePersist());
   const redemptionSubmissions = new PersistentSet<string>(() => schedulePersist());
   const merchantReceivers = new PersistentMap<string, MerchantReceiverRecord>(() => schedulePersist());
   const commercePayments = new PersistentMap<string, CommercePaymentRecord>(() => schedulePersist());
+  const shortLinks = new PersistentMap<string, ShortPaymentLinkRecord>(() => schedulePersist());
   const merchants = new PersistentMap<string, MerchantRecord>(() => schedulePersist());
   const merchantVaults = new PersistentMap<string, MerchantVaultRecord>(() => schedulePersist());
   const entitlements = new PersistentMap<string, Entitlement>(() => schedulePersist());
@@ -318,7 +330,9 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       webhookEvents,
       webhookDeliveries,
       auditLogs,
+      shortLinks,
       registeredTerminals,
+      terminalPaymentNonces,
       redemptionSubmissions,
     });
   }
@@ -343,7 +357,9 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
             webhookEvents,
             webhookDeliveries,
             auditLogs,
+            shortLinks,
             registeredTerminals,
+            terminalPaymentNonces,
             redemptionSubmissions,
           }),
         ),
@@ -372,7 +388,9 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
           webhookEvents,
           webhookDeliveries,
           auditLogs,
+          shortLinks,
           registeredTerminals,
+          terminalPaymentNonces,
           redemptionSubmissions,
         }),
       );
@@ -779,29 +797,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       if (!binding) return reply.code(404).send({ error: "Binding not found" });
       if (binding.status !== "active") return reply.code(409).send({ error: "Binding is not active" });
       const now = new Date();
-      const selectedAsset = optionalString(body.assetId, "assetId")
-        ? findAcceptedAsset(binding, requireString(body.assetId, "assetId"))
-        : undefined;
-      const primaryAsset = selectedAsset ?? binding.acceptedAssets[0];
-      const intent: RedeemLoopPaymentIntent = {
-        intentId: optionalString(body.intentId, "intentId") ?? randomId("pi"),
-        bindingId,
-        merchantId: binding.merchantId,
-        storeId: optionalString(body.storeId, "storeId") ?? binding.commerceTargets[0]?.storeId,
-        channel: normalizePaymentChannel(body.channel ?? "checkout"),
-        orderId: requireString(body.orderId, "orderId"),
-        skuLines: normalizeSkuLines(body.skuLines, binding.commerceTargets),
-        acceptedAssets: binding.acceptedAssets,
-        selectedAsset,
-        payerAddress: optionalString(body.payerAddress, "payerAddress"),
-        merchantVault: findMerchantVaultAddress(binding, primaryAsset),
-        settlementPolicy: binding.settlementPolicy,
-        status: "created",
-        expiresAt: optionalString(body.expiresAt, "expiresAt") ?? new Date(now.getTime() + 15 * 60 * 1000).toISOString(),
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      };
-      assertValidPaymentIntent(intent);
+      const intent = createPaymentIntentRecord(body, binding, now);
       paymentIntents.set(intent.intentId, intent);
       recordAuditLog(auditLogs, {
         merchantId: intent.merchantId,
@@ -815,6 +811,108 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     } catch (error) {
       return reply.code(400).send(errorBody(error));
     }
+  });
+
+  app.post("/v1/pos/payment-intents", async (request, reply) => {
+    try {
+      const body = recordOf(request.body);
+      const bindingId = requireString(body.bindingId, "bindingId");
+      const binding = bindings.get(bindingId);
+      if (!binding) return reply.code(404).send({ error: "Binding not found" });
+      if (binding.status !== "active") return reply.code(409).send({ error: "Binding is not active" });
+      const storeId = optionalString(body.storeId, "storeId") ?? binding.commerceTargets.find((target) => target.platform === "pos")?.storeId ?? binding.commerceTargets[0]?.storeId;
+      const terminalId = requireString(body.terminalId, "terminalId");
+      const terminalRegistrationKey = terminalKey(normalizeBytes32(binding.merchantId, "merchantId"), normalizeBytes32(storeId ?? "", "storeId"), normalizeBytes32(terminalId, "terminalId"));
+      if (!registeredTerminals.has(terminalRegistrationKey)) {
+        return reply.code(403).send({ error: "Terminal is not registered for this merchant and store" });
+      }
+      const terminalNonce = optionalString(body.terminalNonce, "terminalNonce") ?? randomId("pos_nonce");
+      const nonceKey = `${terminalRegistrationKey}:${terminalNonce}`;
+      if (terminalPaymentNonces.has(nonceKey)) return reply.code(409).send({ error: "Terminal payment nonce has already been used" });
+      terminalPaymentNonces.add(nonceKey);
+      const now = new Date();
+      const intent = createPaymentIntentRecord({
+        ...body,
+        bindingId,
+        storeId,
+        channel: "pos",
+        orderId: optionalString(body.orderId, "orderId") ?? `pos_${terminalId}_${now.getTime()}`,
+      }, binding, now);
+      paymentIntents.set(intent.intentId, intent);
+      recordAuditLog(auditLogs, {
+        merchantId: intent.merchantId,
+        action: "payment_intent.pos_qr_created",
+        entityType: "payment_intent",
+        entityId: intent.intentId,
+        summary: "POS QR PaymentIntent created",
+        after: { status: intent.status, storeId, terminalId, terminalNonce },
+      });
+      const qr = {
+        kind: "redeemloop.pos.payment",
+        intentId: intent.intentId,
+        merchantId: intent.merchantId,
+        storeId,
+        terminalId,
+        terminalNonce,
+        expiresAt: intent.expiresAt,
+        paymentUrl: `/redeemloop/pay/${intent.intentId}`,
+      };
+      return reply.code(201).send({ paymentIntent: intent, qr });
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.post("/v1/short-links/payment-intents", async (request, reply) => {
+    try {
+      const body = recordOf(request.body);
+      const bindingId = requireString(body.bindingId, "bindingId");
+      const binding = bindings.get(bindingId);
+      if (!binding) return reply.code(404).send({ error: "Binding not found" });
+      if (binding.status !== "active") return reply.code(409).send({ error: "Binding is not active" });
+      const slug = normalizeSlug(optionalString(body.slug, "slug") ?? randomId("rl"));
+      if (shortLinks.has(slug)) return reply.code(409).send({ error: "Short link slug already exists" });
+      const channel = normalizePaymentChannel(body.channel ?? "livestream");
+      const now = new Date();
+      const intent = createPaymentIntentRecord({
+        ...body,
+        bindingId,
+        channel,
+        orderId: optionalString(body.orderId, "orderId") ?? `short_${slug}`,
+      }, binding, now);
+      paymentIntents.set(intent.intentId, intent);
+      const baseUrl = optionalString(body.baseUrl, "baseUrl") ?? "https://redeemloop.local";
+      const shortLink: ShortPaymentLinkRecord = {
+        slug,
+        intentId: intent.intentId,
+        merchantId: intent.merchantId,
+        channel: intent.channel,
+        url: `${baseUrl.replace(/\/+$/, "")}/s/${encodeURIComponent(slug)}`,
+        createdAt: now.toISOString(),
+        expiresAt: intent.expiresAt,
+      };
+      shortLinks.set(slug, shortLink);
+      recordAuditLog(auditLogs, {
+        merchantId: intent.merchantId,
+        action: "payment_intent.short_link_created",
+        entityType: "payment_intent",
+        entityId: intent.intentId,
+        summary: "Short-link PaymentIntent created",
+        after: { status: intent.status, slug, channel: intent.channel },
+      });
+      return reply.code(201).send({ paymentIntent: intent, shortLink });
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
+  app.get("/v1/short-links/:slug", async (request, reply) => {
+    const params = request.params as { slug: string };
+    const shortLink = shortLinks.get(params.slug);
+    if (!shortLink) return reply.code(404).send({ error: "Short link not found" });
+    const paymentIntent = paymentIntents.get(shortLink.intentId);
+    if (!paymentIntent) return reply.code(404).send({ error: "PaymentIntent not found for short link" });
+    return { shortLink, paymentIntent };
   });
 
   app.get("/v1/payment-intents", async (request) => {
@@ -1709,7 +1807,9 @@ interface SnapshotStores {
   webhookEvents: Map<string, WebhookEventRecord>;
   webhookDeliveries: Map<string, WebhookDeliveryRecord>;
   auditLogs: Map<string, AuditLogRecord>;
+  shortLinks: Map<string, ShortPaymentLinkRecord>;
   registeredTerminals: Set<string>;
+  terminalPaymentNonces: Set<string>;
   redemptionSubmissions: Set<string>;
 }
 
@@ -1731,7 +1831,9 @@ function createApiSnapshot(stores: SnapshotStores): RedeemLoopApiSnapshot {
     webhookEvents: [...stores.webhookEvents.values()],
     webhookDeliveries: [...stores.webhookDeliveries.values()],
     auditLogs: [...stores.auditLogs.values()],
+    shortLinks: [...stores.shortLinks.values()],
     registeredTerminals: [...stores.registeredTerminals.values()],
+    terminalPaymentNonces: [...stores.terminalPaymentNonces.values()],
     redemptionSubmissions: [...stores.redemptionSubmissions.values()],
   };
 }
@@ -1753,7 +1855,9 @@ function hydrateApiSnapshot(snapshot: RedeemLoopApiSnapshot, stores: SnapshotSto
   for (const event of (snapshot.webhookEvents ?? []) as WebhookEventRecord[]) stores.webhookEvents.set(event.eventId, event);
   for (const delivery of (snapshot.webhookDeliveries ?? []) as WebhookDeliveryRecord[]) stores.webhookDeliveries.set(delivery.deliveryId, delivery);
   for (const auditLog of (snapshot.auditLogs ?? []) as AuditLogRecord[]) stores.auditLogs.set(auditLog.auditId, auditLog);
+  for (const shortLink of (snapshot.shortLinks ?? []) as ShortPaymentLinkRecord[]) stores.shortLinks.set(shortLink.slug, shortLink);
   for (const key of snapshot.registeredTerminals ?? []) stores.registeredTerminals.add(key);
+  for (const key of snapshot.terminalPaymentNonces ?? []) stores.terminalPaymentNonces.add(key);
   for (const key of snapshot.redemptionSubmissions ?? []) stores.redemptionSubmissions.add(key);
 }
 
@@ -1984,6 +2088,42 @@ function normalizeSkuLines(value: unknown, commerceTargets: CommerceTarget[]): R
   }
   const sku = commerceTargets.find((target) => target.sku)?.sku ?? commerceTargets[0]?.productId ?? "voucher-tender";
   return [{ sku, quantity: 1 }];
+}
+
+function createPaymentIntentRecord(body: Record<string, unknown>, binding: RedemptionBinding, now: Date): RedeemLoopPaymentIntent {
+  const bindingId = requireString(body.bindingId, "bindingId");
+  const selectedAsset = optionalString(body.assetId, "assetId")
+    ? findAcceptedAsset(binding, requireString(body.assetId, "assetId"))
+    : undefined;
+  const primaryAsset = selectedAsset ?? binding.acceptedAssets[0];
+  const intent: RedeemLoopPaymentIntent = {
+    intentId: optionalString(body.intentId, "intentId") ?? randomId("pi"),
+    bindingId,
+    merchantId: binding.merchantId,
+    storeId: optionalString(body.storeId, "storeId") ?? binding.commerceTargets[0]?.storeId,
+    channel: normalizePaymentChannel(body.channel ?? "checkout"),
+    orderId: requireString(body.orderId, "orderId"),
+    skuLines: normalizeSkuLines(body.skuLines, binding.commerceTargets),
+    acceptedAssets: binding.acceptedAssets,
+    selectedAsset,
+    payerAddress: optionalString(body.payerAddress, "payerAddress"),
+    merchantVault: findMerchantVaultAddress(binding, primaryAsset),
+    settlementPolicy: binding.settlementPolicy,
+    status: "created",
+    expiresAt: optionalString(body.expiresAt, "expiresAt") ?? new Date(now.getTime() + 15 * 60 * 1000).toISOString(),
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+  assertValidPaymentIntent(intent);
+  return intent;
+}
+
+function normalizeSlug(value: string): string {
+  const slug = value.trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9_-]{2,63}$/.test(slug)) {
+    throw new Error("slug must be 3-64 characters using lowercase letters, numbers, underscore, or hyphen");
+  }
+  return slug;
 }
 
 function normalizePositiveInteger(value: unknown, fieldName: string): number {

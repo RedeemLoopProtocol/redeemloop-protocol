@@ -95,6 +95,48 @@ export interface CreatePaymentIntentInput extends Partial<RedeemLoopPaymentInten
   assetId?: string;
 }
 
+export interface CreatePosPaymentIntentInput extends Partial<RedeemLoopPaymentIntent> {
+  bindingId: string;
+  storeId?: string;
+  terminalId: string;
+  terminalNonce?: string;
+}
+
+export interface PosPaymentIntentResponse {
+  paymentIntent: RedeemLoopPaymentIntent;
+  qr: {
+    kind: "redeemloop.pos.payment";
+    intentId: string;
+    merchantId: string;
+    storeId?: string;
+    terminalId: string;
+    terminalNonce: string;
+    expiresAt: string;
+    paymentUrl: string;
+  };
+}
+
+export interface CreateShortLinkPaymentIntentInput extends Partial<RedeemLoopPaymentIntent> {
+  bindingId: string;
+  slug?: string;
+  baseUrl?: string;
+}
+
+export interface ShortPaymentLink {
+  slug: string;
+  intentId: string;
+  merchantId: string;
+  channel: RedeemLoopPaymentIntent["channel"];
+  url: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface ShortLinkPaymentIntentResponse {
+  paymentIntent: RedeemLoopPaymentIntent;
+  shortLink: ShortPaymentLink;
+}
+
 export interface ListPaymentIntentsInput {
   merchantId?: string;
   bindingId?: string;

@@ -136,3 +136,30 @@ export interface SettlementProofResponse {
     };
   };
 }
+
+export interface PosPaymentIntentResponse {
+  paymentIntent: PaymentIntentResponse;
+  qr: {
+    kind: "redeemloop.pos.payment";
+    intentId: string;
+    merchantId: string;
+    storeId?: string;
+    terminalId: string;
+    terminalNonce: string;
+    expiresAt: string;
+    paymentUrl: string;
+  };
+}
+
+export interface ShortLinkPaymentIntentResponse {
+  paymentIntent: PaymentIntentResponse;
+  shortLink: {
+    slug: string;
+    intentId: string;
+    merchantId: string;
+    channel: PaymentIntentResponse["channel"];
+    url: string;
+    createdAt: string;
+    expiresAt: string;
+  };
+}
