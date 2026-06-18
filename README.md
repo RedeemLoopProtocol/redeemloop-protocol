@@ -42,6 +42,7 @@ This release fixes the first public implementation scope:
 - Merchant Admin pilot console with vaults, bindings, PaymentIntents, webhooks, delivery records, audit logs, and pilot seed data.
 - Shopify private-app mark-as-paid alpha with configuration diagnostics, mocked Admin API tests, and GraphQL user-error handling.
 - Rune production certification track with indexer failover adapter boundary and manual-review recovery for indexer lag.
+- Fractal and Inscription/NFT adapter alpha boundaries with mocked ownership and transfer proof tests.
 - Public Merchant Sandbox with Docker Compose, `.env.example`, environment checks, and API reference docs.
 - Bitcoin Rune Wallet/Indexer Beta adapter surface with UniSat `sendRunes`, Xverse `runes_transfer`, Xverse API-backed Rune balance/UTXO/activity verification, API-level Rune settlement recheck, and a clearly labeled PSBT request fixture boundary.
 - Merchant receiving address / vault confirmation model.
@@ -304,6 +305,7 @@ manual_review
 - [Merchant Admin and WooCommerce Pilot](docs/MERCHANT_ADMIN_WOOCOMMERCE_PILOT.md)
 - [Shopify Mark-as-Paid Adapter Alpha](docs/SHOPIFY_ADAPTER_ALPHA.md)
 - [Rune Production Certification Track](docs/RUNE_CERTIFICATION_TRACK.md)
+- [Fractal and Inscription/NFT Adapter Alpha](docs/FRACTAL_INSCRIPTION_ALPHA.md)
 - [Bitcoin Rune Alpha](docs/BITCOIN_RUNE_ALPHA.md)
 - [Bitcoin Rune Real-Usability Plan](docs/BITCOIN_RUNE_REAL_USABILITY.md)
 - [API Reference](docs/API_REFERENCE.md)
@@ -356,6 +358,7 @@ PaymentIntent
 - Merchant Admin pilot console：支持 vaults、bindings、PaymentIntents、webhooks、delivery records、audit logs 和 pilot seed data。
 - Shopify private-app mark-as-paid alpha：包含配置诊断、mocked Admin API tests 和 GraphQL user-error 处理。
 - Rune production certification track：包含 indexer failover adapter boundary 和 indexer lag manual-review recovery。
+- Fractal 和 Inscription/NFT adapter alpha boundaries：包含 mocked ownership 和 transfer proof tests。
 - Public Merchant Sandbox：Docker Compose、`.env.example`、环境检查和 API reference 文档。
 - Bitcoin Rune Wallet/Indexer Beta adapter surface：UniSat `sendRunes`、Xverse `runes_transfer`、基于 Xverse API 的 Rune balance/UTXO/activity 校验、API-level Rune settlement recheck，以及明确标注的 PSBT request fixture 边界。
 - 商户收券地址 / vault 确认模型。
@@ -523,6 +526,7 @@ manual_review
 - [Merchant Admin and WooCommerce Pilot](docs/MERCHANT_ADMIN_WOOCOMMERCE_PILOT.md)
 - [Shopify Mark-as-Paid Adapter Alpha](docs/SHOPIFY_ADAPTER_ALPHA.md)
 - [Rune Production Certification Track](docs/RUNE_CERTIFICATION_TRACK.md)
+- [Fractal and Inscription/NFT Adapter Alpha](docs/FRACTAL_INSCRIPTION_ALPHA.md)
 - [Bitcoin Rune Alpha](docs/BITCOIN_RUNE_ALPHA.md)
 - [Bitcoin Rune Real-Usability Plan](docs/BITCOIN_RUNE_REAL_USABILITY.md)
 - [API Reference](docs/API_REFERENCE.md)

@@ -34,12 +34,16 @@ Current status: v0.6.0 provides certification-track hardening, not live-certifie
 - Fractal inscription adapter.
 - Fractal indexer adapter.
 
+Current status: v0.7.0 provides mocked alpha adapter boundaries, not live-certified Fractal support.
+
 ## Phase 3
 
 - Inscription / NFT voucher adapter.
 - POS QR payment.
 - Livestream commerce short links.
 - Mini-program SDK.
+
+Current status: v0.7.0 provides generic mocked ownership/transfer proof boundaries for inscription, ERC-721, and ERC-1155 voucher assets.
 
 ## Phase 4
 

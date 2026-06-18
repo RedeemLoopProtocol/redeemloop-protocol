@@ -1,4 +1,4 @@
-# RedeemLoop API Reference v0.6.0
+# RedeemLoop API Reference v0.7.0
 
 ## English
 

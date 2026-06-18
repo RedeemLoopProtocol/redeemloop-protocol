@@ -4,6 +4,24 @@
 
 No unreleased changes yet.
 
+## v0.7.0 - 2026-06-18
+
+### Added
+
+- Fractal Rune mocked indexer adapter boundary.
+- Fractal inscription mocked ownership/transfer adapter boundary.
+- Generic inscription/ERC-721/ERC-1155 ownership proof adapter boundary.
+- Mocked adapter tests for Fractal and NFT/inscription voucher proof flows.
+- Bilingual Fractal and Inscription/NFT alpha guide.
+
+### 中文说明
+
+- 新增 Fractal Rune mocked indexer adapter boundary。
+- 新增 Fractal inscription mocked ownership/transfer adapter boundary。
+- 新增通用 inscription/ERC-721/ERC-1155 ownership proof adapter boundary。
+- 新增 Fractal 和 NFT/inscription voucher proof flows 的 mocked adapter tests。
+- 新增双语 Fractal 和 Inscription/NFT alpha guide。
+
 ## v0.6.0 - 2026-06-18
 
 ### Added
