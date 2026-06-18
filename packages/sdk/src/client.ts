@@ -13,6 +13,7 @@ import type {
   CreateWebhookEndpointInput,
   EvmSettlementRecheckInput,
   EvmSettlementRecheckResponse,
+  EvmRpcDiagnosticsResponse,
   ListBindingsInput,
   ListWebhookDeliveriesInput,
   ListWebhookEventsInput,
@@ -203,6 +204,10 @@ export class RedeemLoopClient {
       method: "POST",
       body: JSON.stringify(input),
     });
+  }
+
+  async getEvmRpcDiagnostics(): Promise<EvmRpcDiagnosticsResponse> {
+    return this.request("/v1/diagnostics/evm-rpc");
   }
 
   async createWebhookEndpoint(input: CreateWebhookEndpointInput): Promise<WebhookEndpoint> {

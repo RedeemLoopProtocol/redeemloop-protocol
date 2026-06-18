@@ -229,6 +229,23 @@ export interface RuneSettlementRecheckResponse extends SettlementProofResponse {
   trusted: true;
 }
 
+export interface EvmRpcDiagnostic {
+  chainId: number;
+  name: string;
+  status: "ok" | "missing" | "error";
+  rpcConfigured: boolean;
+  rpcSource?: "EVM_RPC_URLS" | "RPC_URL";
+  rpcOrigin?: string;
+  latestBlockNumber?: string;
+  latencyMs?: number;
+  error?: string;
+}
+
+export interface EvmRpcDiagnosticsResponse {
+  checkedAt: string;
+  chains: EvmRpcDiagnostic[];
+}
+
 export interface WebhookEndpoint {
   id: string;
   merchantId: string;

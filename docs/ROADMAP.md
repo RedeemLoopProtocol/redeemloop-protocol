@@ -9,6 +9,9 @@ This roadmap is the public product direction after the v0.2 Phase 0 realignment.
 - Shopify / WooCommerce mark-as-paid webhook and adapter surface.
 - Asset Binding, Voucher Tender, PaymentIntent, receipt confirmation, and mark-as-paid loop.
 - ETH, BSC, Polygon PoS, and Arbitrum wallet send support through EIP-1193 injected wallets.
+- EVM live certification console, wallet error taxonomy, and RPC health diagnostics for pilot runs.
+
+Current status: v0.4.4 provides EVM pilot-certification tooling. Funded wallet runs are still required before claiming a specific wallet/network pair is production-certified.
 
 ## Phase 1
 

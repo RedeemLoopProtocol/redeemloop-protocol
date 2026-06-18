@@ -4,6 +4,37 @@
 
 No unreleased changes yet.
 
+## v0.4.4 - 2026-06-18
+
+### Added
+
+- EVM live certification console at `/evm-live-certification`.
+- Merchant-facing EVM wallet error taxonomy in `@redeemloop/adapters`.
+- React Pay Button `onEvent` stream for intent, wallet, transaction, settlement, and completion events.
+- Script widget wallet events including `redeemloop:wallet_connected` and structured `redeemloop:error` codes.
+- API endpoint `GET /v1/diagnostics/evm-rpc` for chain-specific RPC health checks.
+- SDK helper `getEvmRpcDiagnostics()`.
+- Bilingual EVM live certification runbook.
+
+### Changed
+
+- Auto-send EVM flows now connect the wallet first and use the connected account for transaction submission and settlement recheck.
+- EVM receipt provider injection now receives the chain-specific RPC URL selected from `EVM_RPC_URLS`.
+- The public wording now keeps live wallet certification separate from general beta integration support.
+
+### 中文说明
+
+- 新增 EVM live certification console：`/evm-live-certification`。
+- `@redeemloop/adapters` 新增面向商户的钱包错误分类。
+- React Pay Button 新增 `onEvent` 事件流，覆盖 intent、wallet、transaction、settlement 和 completion。
+- Script widget 新增钱包事件，包括 `redeemloop:wallet_connected` 和带 code 的结构化 `redeemloop:error`。
+- API 新增 `GET /v1/diagnostics/evm-rpc`，用于按链检查 RPC 健康状态。
+- SDK 新增 `getEvmRpcDiagnostics()`。
+- 新增双语 EVM live certification runbook。
+- 自动 EVM 钱包发送流程现在会先连接钱包，并使用连接账户提交交易和做 settlement recheck。
+- 注入式 EVM receipt provider 现在会收到通过 `EVM_RPC_URLS` 选择出的 chain-specific RPC URL。
+- 公开表述继续严格区分 live wallet certification 和 beta integration support。
+
 ## v0.4.3 - 2026-06-18
 
 ### Added

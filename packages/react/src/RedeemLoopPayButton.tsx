@@ -1,11 +1,13 @@
 import { useState } from "react";
 import type { RedeemLoopPaymentIntent } from "@redeemloop/core";
 import { RedeemLoopClient } from "@redeemloop/sdk";
+import { EvmWalletError, formatEvmWalletErrorForMerchant } from "@redeemloop/adapters";
 
 import { useRedeemLoopClient } from "./context.js";
 import {
   runRedeemLoopPayFlow,
   type RedeemLoopPayFlowInput,
+  type RedeemLoopPayEvent,
   type RedeemLoopPayFlowResult,
   type RedeemLoopPayStep,
 } from "./flow.js";
@@ -26,6 +28,7 @@ export interface RedeemLoopPayButtonProps extends RedeemLoopPayFlowInput {
   disabled?: boolean;
   labels?: RedeemLoopPayButtonLabels;
   onStep?: (step: RedeemLoopPayStep) => void;
+  onEvent?: (event: RedeemLoopPayEvent) => void;
   onIntent?: (intent: RedeemLoopPaymentIntent) => void;
   onComplete?: (result: RedeemLoopPayFlowResult) => void;
   onError?: (error: Error) => void;
@@ -60,6 +63,7 @@ export function RedeemLoopPayButton(props: RedeemLoopPayButtonProps) {
     try {
       const result = await runRedeemLoopPayFlow(client, props, {
         onStep: props.onStep,
+        onEvent: props.onEvent,
       });
       props.onIntent?.(result.intent);
       props.onComplete?.(result);
@@ -67,7 +71,7 @@ export function RedeemLoopPayButton(props: RedeemLoopPayButtonProps) {
     } catch (cause) {
       const nextError = cause instanceof Error ? cause : new Error("RedeemLoop payment failed");
       setState("error");
-      setError(nextError.message);
+      setError(nextError instanceof EvmWalletError ? formatEvmWalletErrorForMerchant(nextError) : nextError.message);
       props.onError?.(nextError);
     }
   }

@@ -305,6 +305,7 @@ describe("runRedeemLoopPayFlow", () => {
     } as unknown as RedeemLoopClient;
 
     const steps: string[] = [];
+    const events: string[] = [];
     const result = await runRedeemLoopPayFlow(
       client,
       {
@@ -316,7 +317,10 @@ describe("runRedeemLoopPayFlow", () => {
         autoRecheckEvmSettlement: true,
         evmProvider,
       },
-      { onStep: (step) => steps.push(step) },
+      {
+        onStep: (step) => steps.push(step),
+        onEvent: (event) => events.push(event.type),
+      },
     );
 
     expect(result.intent.status).toBe("paid");
@@ -337,6 +341,16 @@ describe("runRedeemLoopPayFlow", () => {
       "broadcasting",
       "rechecking_settlement",
       "complete",
+    ]);
+    expect(events).toEqual([
+      "intent_created",
+      "balance_checked",
+      "transfer_requested",
+      "wallet_connected",
+      "wallet_transaction_submitted",
+      "transaction_broadcasted",
+      "settlement_rechecked",
+      "payment_complete",
     ]);
   });
 });

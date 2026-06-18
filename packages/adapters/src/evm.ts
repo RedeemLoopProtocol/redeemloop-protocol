@@ -38,6 +38,49 @@ export interface Eip1193Provider {
   request<T = unknown>(args: Eip1193RequestArguments): Promise<T>;
 }
 
+export type EvmWalletErrorCode =
+  | "wallet_missing"
+  | "wallet_request_rejected"
+  | "wallet_request_pending"
+  | "wallet_unauthorized"
+  | "wallet_unsupported_method"
+  | "wallet_chain_unsupported"
+  | "wallet_chain_switch_failed"
+  | "wallet_chain_add_failed"
+  | "wallet_account_mismatch"
+  | "wallet_insufficient_funds"
+  | "wallet_transaction_rejected"
+  | "wallet_transaction_failed"
+  | "wallet_invalid_response"
+  | "wallet_unknown_error";
+
+export interface EvmWalletErrorOptions {
+  code: EvmWalletErrorCode;
+  message?: string;
+  method?: string;
+  providerCode?: number | string;
+  retryable?: boolean;
+  cause?: unknown;
+}
+
+export class EvmWalletError extends Error {
+  readonly code: EvmWalletErrorCode;
+  readonly method?: string;
+  readonly providerCode?: number | string;
+  readonly retryable: boolean;
+  readonly cause?: unknown;
+
+  constructor(options: EvmWalletErrorOptions) {
+    super(options.message ?? defaultEvmWalletErrorMessage(options.code));
+    this.name = "EvmWalletError";
+    this.code = options.code;
+    this.method = options.method;
+    this.providerCode = options.providerCode;
+    this.retryable = options.retryable ?? defaultEvmWalletRetryable(options.code);
+    this.cause = options.cause;
+  }
+}
+
 export interface EvmWalletAccount {
   address: Address;
   chainId: number;
@@ -244,12 +287,12 @@ export function createEip1193EvmWalletAdapter(provider: Eip1193Provider, options
   const chains = options.chains ?? redeemLoopEvmChains;
   return {
     async connect(input = {}) {
-      const accounts = await provider.request<string[]>({ method: "eth_requestAccounts" });
+      const accounts = await requestEvmWallet<string[]>(provider, "eth_requestAccounts");
       const address = normalizeWalletAccount(accounts);
       if (input.chainId !== undefined && input.switchChain !== false) {
         await ensureEvmWalletChain(provider, input.chainId, chains);
       }
-      const chainIdHex = await provider.request<string>({ method: "eth_chainId" });
+      const chainIdHex = await requestEvmWallet<string>(provider, "eth_chainId");
       const chainId = parseEvmChainId(chainIdHex);
       return { address, chainId, chainIdHex: evmChainIdToHex(chainId) };
     },
@@ -263,19 +306,22 @@ export function createEip1193EvmWalletAdapter(provider: Eip1193Provider, options
       if (input.switchChain !== false) {
         await ensureEvmWalletChain(provider, transfer.chainId, chains);
       }
-      const from = input.from ?? transfer.transaction.from ?? normalizeWalletAccount(await provider.request<string[]>({ method: "eth_requestAccounts" }));
-      const txid = await provider.request<unknown>({
-        method: "eth_sendTransaction",
-        params: [
-          {
-            from: getAddress(from),
-            to: transfer.transaction.to,
-            data: transfer.transaction.data,
-            value: transfer.transaction.value,
-          },
-        ],
-      });
-      if (typeof txid !== "string" || !/^0x[0-9a-fA-F]+$/.test(txid)) throw new Error("Wallet did not return a transaction hash");
+      const from = input.from ?? transfer.transaction.from ?? normalizeWalletAccount(await requestEvmWallet<string[]>(provider, "eth_requestAccounts"));
+      const txid = await requestEvmWallet<unknown>(provider, "eth_sendTransaction", [
+        {
+          from: getAddress(from),
+          to: transfer.transaction.to,
+          data: transfer.transaction.data,
+          value: transfer.transaction.value,
+        },
+      ]);
+      if (typeof txid !== "string" || !/^0x[0-9a-fA-F]+$/.test(txid)) {
+        throw new EvmWalletError({
+          code: "wallet_invalid_response",
+          method: "eth_sendTransaction",
+          message: "Wallet did not return a transaction hash.",
+        });
+      }
       return txid as Hex;
     },
   };
@@ -287,27 +333,24 @@ export async function ensureEvmWalletChain(
   chains: readonly EvmChainConfig[] = redeemLoopEvmChains,
 ): Promise<void> {
   const target = evmChainIdToHex(chainId);
-  const current = await provider.request<string>({ method: "eth_chainId" }).catch(() => undefined);
+  const current = await requestEvmWallet<string>(provider, "eth_chainId").catch(() => undefined);
   if (current && parseEvmChainId(current) === chainId) return;
   try {
-    await provider.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: target }],
-    });
+    await requestEvmWallet(provider, "wallet_switchEthereumChain", [{ chainId: target }]);
   } catch (error) {
     if (!isUnknownChainError(error)) throw error;
     await addEvmWalletChain(provider, getRedeemLoopEvmChainConfig(chainId, chains));
-    await provider.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: target }],
-    });
+    try {
+      await requestEvmWallet(provider, "wallet_switchEthereumChain", [{ chainId: target }]);
+    } catch (switchError) {
+      throw normalizeEvmWalletError(switchError, "wallet_chain_switch_failed", "wallet_switchEthereumChain");
+    }
   }
 }
 
 export async function addEvmWalletChain(provider: Eip1193Provider, chain: EvmChainConfig): Promise<void> {
-  await provider.request({
-    method: "wallet_addEthereumChain",
-    params: [
+  try {
+    await requestEvmWallet(provider, "wallet_addEthereumChain", [
       {
         chainId: chain.chainIdHex,
         chainName: chain.name,
@@ -315,8 +358,35 @@ export async function addEvmWalletChain(provider: Eip1193Provider, chain: EvmCha
         rpcUrls: chain.rpcUrls,
         blockExplorerUrls: chain.blockExplorerUrls,
       },
-    ],
+    ]);
+  } catch (error) {
+    throw normalizeEvmWalletError(error, "wallet_chain_add_failed", "wallet_addEthereumChain");
+  }
+}
+
+export function normalizeEvmWalletError(
+  error: unknown,
+  fallbackCode: EvmWalletErrorCode = "wallet_unknown_error",
+  method?: string,
+): EvmWalletError {
+  if (error instanceof EvmWalletError) return error;
+  const record = error && typeof error === "object" ? (error as { code?: unknown; message?: unknown }) : {};
+  const providerCode = typeof record.code === "number" || typeof record.code === "string" ? record.code : undefined;
+  const providerMessage = typeof record.message === "string" ? record.message : undefined;
+  const normalizedMessage = providerMessage?.toLowerCase() ?? "";
+  const code = classifyEvmWalletErrorCode(providerCode, normalizedMessage, fallbackCode, method);
+  return new EvmWalletError({
+    code,
+    method,
+    providerCode,
+    message: defaultEvmWalletErrorMessage(code),
+    cause: error,
   });
+}
+
+export function formatEvmWalletErrorForMerchant(error: unknown): string {
+  const normalized = normalizeEvmWalletError(error);
+  return `${normalized.code}: ${normalized.message}`;
 }
 
 export function buildErc20TransferRequest(input: Erc20TransferRequestInput): Erc20TransferRequest {
@@ -516,7 +586,78 @@ function normalizeWalletAccount(accounts: unknown): Address {
 }
 
 function isUnknownChainError(error: unknown): boolean {
+  if (error instanceof EvmWalletError) return error.code === "wallet_chain_unsupported" || error.providerCode === 4902;
   if (!error || typeof error !== "object") return false;
   const record = error as { code?: unknown; message?: unknown };
   return record.code === 4902 || (typeof record.message === "string" && /unrecognized|unknown|not added/i.test(record.message));
+}
+
+async function requestEvmWallet<T = unknown>(provider: Eip1193Provider, method: string, params?: readonly unknown[]): Promise<T> {
+  try {
+    return await provider.request<T>(params === undefined ? { method } : { method, params });
+  } catch (error) {
+    throw normalizeEvmWalletError(error, fallbackCodeForWalletMethod(method), method);
+  }
+}
+
+function classifyEvmWalletErrorCode(
+  providerCode: number | string | undefined,
+  message: string,
+  fallbackCode: EvmWalletErrorCode,
+  method?: string,
+): EvmWalletErrorCode {
+  if (providerCode === 4001 || /user rejected|user denied|rejected the request|denied transaction|declined/i.test(message)) {
+    return method === "eth_sendTransaction" ? "wallet_transaction_rejected" : "wallet_request_rejected";
+  }
+  if (providerCode === -32002 || /already pending|request is pending/i.test(message)) return "wallet_request_pending";
+  if (providerCode === 4100 || /unauthorized|not authorized/i.test(message)) return "wallet_unauthorized";
+  if (providerCode === 4200 || /unsupported method|method not supported/i.test(message)) return "wallet_unsupported_method";
+  if (providerCode === 4900 || providerCode === 4901 || providerCode === 4902) return "wallet_chain_unsupported";
+  if (/insufficient funds|insufficient balance|gas required exceeds allowance|intrinsic gas/i.test(message)) return "wallet_insufficient_funds";
+  if (/revert|execution reverted|transaction failed/i.test(message)) return "wallet_transaction_failed";
+  return fallbackCode;
+}
+
+function fallbackCodeForWalletMethod(method: string): EvmWalletErrorCode {
+  if (method === "eth_sendTransaction") return "wallet_transaction_failed";
+  if (method === "wallet_switchEthereumChain") return "wallet_chain_switch_failed";
+  if (method === "wallet_addEthereumChain") return "wallet_chain_add_failed";
+  return "wallet_unknown_error";
+}
+
+function defaultEvmWalletErrorMessage(code: EvmWalletErrorCode): string {
+  switch (code) {
+    case "wallet_missing":
+      return "No injected EVM wallet provider was found. Ask the customer to install or open a supported wallet.";
+    case "wallet_request_rejected":
+      return "The customer rejected the wallet request. Ask them to retry and approve the wallet prompt.";
+    case "wallet_request_pending":
+      return "A wallet request is already pending. Ask the customer to open their wallet and finish the current prompt.";
+    case "wallet_unauthorized":
+      return "The wallet has not authorized this site. Ask the customer to connect the correct account.";
+    case "wallet_unsupported_method":
+      return "The connected wallet does not support the required EVM wallet method.";
+    case "wallet_chain_unsupported":
+      return "The wallet does not recognize the requested EVM network.";
+    case "wallet_chain_switch_failed":
+      return "The wallet could not switch to the required EVM network.";
+    case "wallet_chain_add_failed":
+      return "The wallet could not add the required EVM network.";
+    case "wallet_account_mismatch":
+      return "The connected wallet account does not match the payer address on this PaymentIntent.";
+    case "wallet_insufficient_funds":
+      return "The wallet does not have enough native gas or voucher balance to submit this transaction.";
+    case "wallet_transaction_rejected":
+      return "The customer rejected the transaction signature.";
+    case "wallet_transaction_failed":
+      return "The wallet could not submit the transaction.";
+    case "wallet_invalid_response":
+      return "The wallet returned an invalid response.";
+    case "wallet_unknown_error":
+      return "The wallet returned an unknown error.";
+  }
+}
+
+function defaultEvmWalletRetryable(code: EvmWalletErrorCode): boolean {
+  return !["wallet_account_mismatch", "wallet_unsupported_method"].includes(code);
 }

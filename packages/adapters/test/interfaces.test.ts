@@ -7,7 +7,9 @@ import {
   createEip1193EvmWalletAdapter,
   createErc20PaymentProof,
   erc20TransferEvent,
+  formatEvmWalletErrorForMerchant,
   getRedeemLoopEvmChainConfig,
+  normalizeEvmWalletError,
   supportedRedeemLoopEvmChainIds,
   type EvmAdapter,
   type Eip1193Provider,
@@ -178,6 +180,22 @@ describe("adapter contracts", () => {
     ]);
     const [txParams] = sendCall?.params as Array<{ to: string }>;
     expect(txParams.to.toLowerCase()).toBe("0x0000000000000000000000000000000000000def");
+  });
+
+  it("normalizes common EIP-1193 wallet errors for merchant-facing UX", () => {
+    expect(normalizeEvmWalletError({ code: 4001, message: "User rejected the request" }, "wallet_unknown_error", "eth_requestAccounts")).toMatchObject({
+      code: "wallet_request_rejected",
+      retryable: true,
+      providerCode: 4001,
+    });
+    expect(normalizeEvmWalletError({ code: -32002, message: "Request already pending" })).toMatchObject({
+      code: "wallet_request_pending",
+      retryable: true,
+    });
+    expect(normalizeEvmWalletError({ message: "insufficient funds for gas * price + value" }, "wallet_transaction_failed")).toMatchObject({
+      code: "wallet_insufficient_funds",
+    });
+    expect(formatEvmWalletErrorForMerchant({ code: 4100, message: "Unauthorized" })).toContain("wallet_unauthorized:");
   });
 
   it("verifies ERC-20 Transfer logs from an EVM receipt", () => {

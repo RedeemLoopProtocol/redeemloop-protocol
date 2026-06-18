@@ -32,6 +32,7 @@ This release fixes the first public implementation scope:
 - EVM ERC-20 transfer request calldata for wallet payment buttons.
 - EVM ERC-20 balance check request for wallet holding checks.
 - EVM Multi-Chain Wallet Beta for Ethereum, BNB Smart Chain, Polygon PoS, and Arbitrum One through injected EIP-1193 wallets.
+- EVM Live Certification console and merchant-facing wallet error taxonomy for ETH/BSC/Polygon/Arbitrum pilot runs.
 - Merchant Embed Alpha with SDK methods, React Pay Button, script-tag widget, and demo store page.
 - File-backed sandbox persistence and merchant-scoped API key enforcement for local/pilot environments.
 - Trusted EVM ERC-20 settlement recheck from transaction receipts.
@@ -70,13 +71,13 @@ RedeemLoop does not:
 
 ```text
 packages/core      Protocol types, validators, PaymentIntent state machine
-packages/adapters  EVM, Bitcoin Rune wallet/indexer adapters, PSBT fixture boundary, and shared adapter interfaces
+packages/adapters  EVM, Bitcoin Rune wallet/indexer adapters, wallet error taxonomy, PSBT fixture boundary, and shared adapter interfaces
 packages/sdk       TypeScript API client
 packages/react     React provider and Pay Button for merchant embeds
 packages/widget    Script-tag widget for non-React merchant stores
 packages/contracts EVM ERC-20 voucher example contracts only
 services/api       Fastify API for bindings, intents, proofs, webhooks, commerce adapters
-apps/pos-verifier  Local Phase 0 console, POS-style QR demo, and demo store page
+apps/pos-verifier  Local Phase 0 console, POS-style QR demo, demo store page, and EVM live certification console
 plugins/woocommerce WooCommerce sandbox payment gateway plugin
 docs/              v0.2 protocol, boundary, API, integration, and construction docs
 whitepaper/        v0.2 whitepaper source and rendered files
@@ -295,6 +296,7 @@ manual_review
 - [Integration Guide](docs/INTEGRATION_GUIDE.md)
 - [Public Merchant Sandbox](docs/PUBLIC_SANDBOX.md)
 - [EVM Multi-Chain Wallet Beta](docs/EVM_MULTI_CHAIN_WALLET.md)
+- [EVM Live Certification Runbook](docs/EVM_LIVE_CERTIFICATION.md)
 - [Bitcoin Rune Alpha](docs/BITCOIN_RUNE_ALPHA.md)
 - [Bitcoin Rune Real-Usability Plan](docs/BITCOIN_RUNE_REAL_USABILITY.md)
 - [API Reference](docs/API_REFERENCE.md)
@@ -337,6 +339,7 @@ PaymentIntent
 - EVM ERC-20 钱包支付按钮所需的 transfer calldata。
 - EVM ERC-20 持券检测所需的 balanceOf call request。
 - EVM Multi-Chain Wallet Beta：通过注入式 EIP-1193 钱包支持 Ethereum、BNB Smart Chain、Polygon PoS 和 Arbitrum One。
+- EVM Live Certification console 和面向商户的钱包错误分类，用于 ETH/BSC/Polygon/Arbitrum pilot run。
 - Merchant Embed Alpha：SDK 方法、React Pay Button、script-tag widget 和 demo store 页面。
 - 文件持久化 sandbox 和商户级 API key 校验，适用于本地和 pilot 环境。
 - 基于 transaction receipt 的可信 EVM ERC-20 settlement recheck。
@@ -375,13 +378,13 @@ RedeemLoop 不做：
 
 ```text
 packages/core      协议类型、校验器、PaymentIntent 状态机
-packages/adapters  EVM、Bitcoin Rune 钱包/索引器 adapters、PSBT fixture 边界和通用 adapter interfaces
+packages/adapters  EVM、Bitcoin Rune 钱包/索引器 adapters、钱包错误分类、PSBT fixture 边界和通用 adapter interfaces
 packages/sdk       TypeScript API client
 packages/react     面向商户嵌入的 React provider 和 Pay Button
 packages/widget    面向非 React 店铺的 script-tag widget
 packages/contracts EVM ERC-20 提货资产示例合约
 services/api       binding、intent、proof、webhook、电商适配 API
-apps/pos-verifier  本地 Phase 0 控制台、POS QR 演示和 demo store 页面
+apps/pos-verifier  本地 Phase 0 控制台、POS QR 演示、demo store 页面和 EVM live certification console
 docs/              v0.2 协议、边界、API、集成和施工文档
 whitepaper/        v0.2 白皮书源码和渲染文件
 ```
@@ -505,6 +508,7 @@ manual_review
 - [集成指南](docs/INTEGRATION_GUIDE.md)
 - [Public Merchant Sandbox](docs/PUBLIC_SANDBOX.md)
 - [EVM Multi-Chain Wallet Beta](docs/EVM_MULTI_CHAIN_WALLET.md)
+- [EVM Live Certification Runbook](docs/EVM_LIVE_CERTIFICATION.md)
 - [Bitcoin Rune Alpha](docs/BITCOIN_RUNE_ALPHA.md)
 - [Bitcoin Rune Real-Usability Plan](docs/BITCOIN_RUNE_REAL_USABILITY.md)
 - [API Reference](docs/API_REFERENCE.md)

@@ -1,4 +1,4 @@
-import { createEip1193EvmWalletAdapter, type Eip1193Provider } from "@redeemloop/adapters";
+import { EvmWalletError, createEip1193EvmWalletAdapter, formatEvmWalletErrorForMerchant, type Eip1193Provider } from "@redeemloop/adapters";
 import { RedeemLoopClient, type TransferRequestResponse } from "@redeemloop/sdk";
 
 export interface RedeemLoopWidgetOptions {
@@ -73,12 +73,30 @@ export function mountRedeemLoopPayButton(element: HTMLElement, options: RedeemLo
       dispatchWidgetEvent(element, "redeemloop:transfer", transferResponse.transfer);
 
       let txid = options.txid;
+      let payerAddress = options.payerAddress;
       if (options.autoSendEvmTransaction) {
         if (!transferResponse.transfer.evm) throw new Error("EVM wallet send requires an EVM transfer request");
         const provider = getInjectedEvmProvider();
-        if (!provider) throw new Error("No injected EVM wallet provider found");
-        txid = await createEip1193EvmWalletAdapter(provider).sendErc20Transfer(transferResponse.transfer.evm, {
-          from: options.payerAddress,
+        if (!provider) throw new EvmWalletError({ code: "wallet_missing" });
+        const wallet = createEip1193EvmWalletAdapter(provider);
+        const account = await wallet.connect({
+          chainId: transferResponse.transfer.evm.chainId,
+          switchChain: options.switchEvmChain !== false,
+        });
+        if (payerAddress && payerAddress.toLowerCase() !== account.address.toLowerCase()) {
+          throw new EvmWalletError({
+            code: "wallet_account_mismatch",
+            message: "Connected wallet account does not match the payer address on this PaymentIntent.",
+          });
+        }
+        payerAddress = payerAddress ?? account.address;
+        dispatchWidgetEvent(element, "redeemloop:wallet_connected", {
+          payerAddress,
+          chainId: account.chainId,
+          chainIdHex: account.chainIdHex,
+        });
+        txid = await wallet.sendErc20Transfer(transferResponse.transfer.evm, {
+          from: payerAddress,
           switchChain: options.switchEvmChain !== false,
         });
         dispatchWidgetEvent(element, "redeemloop:wallet_tx", { txid });
@@ -89,18 +107,18 @@ export function mountRedeemLoopPayButton(element: HTMLElement, options: RedeemLo
         dispatchWidgetEvent(element, "redeemloop:broadcasted", { txid });
       }
 
-      if (options.autoRecheckEvmSettlement && txid && options.payerAddress && transferResponse.transfer.evm) {
+      if (options.autoRecheckEvmSettlement && txid && payerAddress && transferResponse.transfer.evm) {
         const proof = await client.recheckEvmSettlement(intent.intentId, {
           txid,
-          from: options.payerAddress,
+          from: payerAddress,
         });
         setButtonState(button, "paid", options.paidLabel ?? "Paid");
         dispatchWidgetEvent(element, "redeemloop:paid", proof);
         return;
       }
 
-      if (options.autoSubmitProof && txid && options.payerAddress) {
-        const proof = await submitWidgetProof(client, transferResponse, options, txid);
+      if (options.autoSubmitProof && txid && payerAddress) {
+        const proof = await submitWidgetProof(client, transferResponse, options, txid, payerAddress);
         setButtonState(button, "paid", options.paidLabel ?? "Paid");
         dispatchWidgetEvent(element, "redeemloop:paid", proof);
         return;
@@ -110,7 +128,10 @@ export function mountRedeemLoopPayButton(element: HTMLElement, options: RedeemLo
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error("RedeemLoop payment failed");
       setButtonState(button, "error", options.errorLabel ?? "Check payment");
-      dispatchWidgetEvent(element, "redeemloop:error", { message: error.message });
+      dispatchWidgetEvent(element, "redeemloop:error", {
+        message: error instanceof EvmWalletError ? formatEvmWalletErrorForMerchant(error) : error.message,
+        code: error instanceof EvmWalletError ? error.code : undefined,
+      });
     }
   }
 
@@ -171,7 +192,13 @@ if (typeof document !== "undefined") {
   queueMicrotask(() => autoMountRedeemLoopWidgets());
 }
 
-async function submitWidgetProof(client: RedeemLoopClient, transferResponse: TransferRequestResponse, options: RedeemLoopWidgetOptions, txid: string) {
+async function submitWidgetProof(
+  client: RedeemLoopClient,
+  transferResponse: TransferRequestResponse,
+  options: RedeemLoopWidgetOptions,
+  txid: string,
+  payerAddress: string,
+) {
   const asset = transferResponse.selectedAsset ?? transferResponse.acceptedAssets[0];
   if (!asset) throw new Error("PaymentIntent has no accepted asset to submit proof for");
   return client.submitSettlementProof({
@@ -179,7 +206,7 @@ async function submitWidgetProof(client: RedeemLoopClient, transferResponse: Tra
     chainNamespace: asset.chainNamespace,
     chainId: asset.chainId,
     txid,
-    from: options.payerAddress!,
+    from: payerAddress,
     to: transferResponse.merchantVault,
     assetType: asset.assetType,
     assetId: asset.assetId,

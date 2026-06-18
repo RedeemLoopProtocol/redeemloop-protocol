@@ -1,4 +1,4 @@
-# RedeemLoop API Reference v0.4.3
+# RedeemLoop API Reference v0.4.4
 
 ## English
 
@@ -82,7 +82,10 @@ POST /v1/webhook-deliveries/:deliveryId/replay
 ```http
 GET /health
 GET /v1/config
+GET /v1/diagnostics/evm-rpc
 ```
+
+`GET /v1/diagnostics/evm-rpc` reports ETH/BSC/Polygon/Arbitrum RPC status, source, origin, latest block height, and latency. It does not return the full RPC URL to avoid leaking provider API keys.
 
 ## 中文
 
@@ -166,4 +169,7 @@ POST /v1/webhook-deliveries/:deliveryId/replay
 ```http
 GET /health
 GET /v1/config
+GET /v1/diagnostics/evm-rpc
 ```
+
+`GET /v1/diagnostics/evm-rpc` 会返回 ETH/BSC/Polygon/Arbitrum 的 RPC 状态、来源、origin、最新块高和延迟。接口不会返回完整 RPC URL，以避免泄漏 provider API key。

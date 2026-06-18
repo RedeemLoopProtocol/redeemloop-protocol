@@ -70,6 +70,7 @@ describe("RedeemLoopClient", () => {
       txid: "btc_txid",
       confirmations: 1,
     });
+    await client.getEvmRpcDiagnostics();
     await client.createWebhookEndpoint({
       merchantId: "merchant_cafe",
       url: "https://merchant.example/redeemloop",
@@ -86,6 +87,7 @@ describe("RedeemLoopClient", () => {
       "https://api.example.test/v1/settlement/proofs",
       "https://api.example.test/v1/settlement/evm/recheck/pi_test",
       "https://api.example.test/v1/settlement/rune/recheck/pi_test",
+      "https://api.example.test/v1/diagnostics/evm-rpc",
       "https://api.example.test/v1/webhook-endpoints",
     ]);
     expect(calls[0]?.init?.headers).toBeInstanceOf(Headers);

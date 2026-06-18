@@ -6,6 +6,7 @@ import {
   buildErc20TransferRequest,
   buildRuneTransferPsbtRequest,
   createXverseRuneIndexerAdapter,
+  redeemLoopEvmChains,
   verifyErc20TransferReceipt,
   type Erc20BalanceCheckRequest,
   type Erc20TransactionReceiptLike,
@@ -91,6 +92,9 @@ interface ApiConfig {
   evmReceiptProvider?: (input: { txid: Hex; chainId: number; rpcUrl?: string }) => Promise<{
     receipt: Erc20TransactionReceiptLike;
     currentBlockNumber?: bigint | number;
+  }>;
+  evmRpcHealthProvider?: (input: { chainId: number; rpcUrl?: string }) => Promise<{
+    latestBlockNumber?: bigint | number;
   }>;
   runeIndexer?: RuneIndexerAdapter;
   xverseApiKey?: string;
@@ -261,6 +265,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     apiKeys: parseMerchantApiKeys(config.apiKeys ?? process.env.REDEEMLOOP_API_KEYS),
     evmMinConfirmations: normalizePositiveInteger(config.evmMinConfirmations ?? process.env.EVM_MIN_CONFIRMATIONS ?? 1, "evmMinConfirmations"),
     evmReceiptProvider: config.evmReceiptProvider,
+    evmRpcHealthProvider: config.evmRpcHealthProvider,
     runeIndexer: config.runeIndexer,
     xverseApiKey: config.xverseApiKey ?? process.env.XVERSE_API_KEY,
     xverseNetwork: normalizeRuneIndexerNetwork(config.xverseNetwork ?? process.env.XVERSE_NETWORK ?? "mainnet"),
@@ -414,6 +419,11 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     auth: {
       apiKeysEnabled: Object.keys(resolvedConfig.apiKeys).length > 0,
     },
+  }));
+
+  app.get("/v1/diagnostics/evm-rpc", async () => ({
+    checkedAt: new Date().toISOString(),
+    chains: await Promise.all(redeemLoopEvmChains.map((chain) => checkEvmRpcDiagnostic(chain.chainId, chain.name, resolvedConfig))),
   }));
 
   app.post("/v1/merchants", async (request, reply) => {
@@ -1917,10 +1927,10 @@ async function fetchEvmReceipt(
   chainId: number,
   config: ApiConfig,
 ): Promise<{ receipt: Erc20TransactionReceiptLike; currentBlockNumber?: bigint | number }> {
-  if (config.evmReceiptProvider) {
-    return config.evmReceiptProvider({ txid, chainId, rpcUrl: config.rpcUrl });
-  }
   const rpcUrl = config.evmRpcUrls[chainId] ?? config.rpcUrl;
+  if (config.evmReceiptProvider) {
+    return config.evmReceiptProvider({ txid, chainId, rpcUrl });
+  }
   if (!rpcUrl) throw new Error("RPC_URL or EVM_RPC_URLS entry is required for trusted EVM settlement recheck");
   const publicClient = createPublicClient({
     transport: http(rpcUrl),
@@ -1944,6 +1954,78 @@ async function fetchEvmReceipt(
     },
     currentBlockNumber,
   };
+}
+
+async function checkEvmRpcDiagnostic(
+  chainId: number,
+  name: string,
+  config: ApiConfig,
+): Promise<{
+  chainId: number;
+  name: string;
+  status: "ok" | "missing" | "error";
+  rpcConfigured: boolean;
+  rpcSource?: "EVM_RPC_URLS" | "RPC_URL";
+  rpcOrigin?: string;
+  latestBlockNumber?: string;
+  latencyMs?: number;
+  error?: string;
+}> {
+  const rpc = resolveEvmRpcDiagnosticUrl(chainId, config);
+  if (!rpc.rpcUrl) {
+    return {
+      chainId,
+      name,
+      status: "missing",
+      rpcConfigured: false,
+      error: "No RPC URL configured for this chain. Set EVM_RPC_URLS for this chainId or provide RPC_URL as a fallback.",
+    };
+  }
+
+  const startedAt = Date.now();
+  try {
+    const health = config.evmRpcHealthProvider
+      ? await config.evmRpcHealthProvider({ chainId, rpcUrl: rpc.rpcUrl })
+      : { latestBlockNumber: await createPublicClient({ transport: http(rpc.rpcUrl) }).getBlockNumber() };
+    return {
+      chainId,
+      name,
+      status: "ok",
+      rpcConfigured: true,
+      rpcSource: rpc.source,
+      rpcOrigin: rpcOriginOf(rpc.rpcUrl),
+      latestBlockNumber: health.latestBlockNumber === undefined ? undefined : String(health.latestBlockNumber),
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    return {
+      chainId,
+      name,
+      status: "error",
+      rpcConfigured: true,
+      rpcSource: rpc.source,
+      rpcOrigin: rpcOriginOf(rpc.rpcUrl),
+      latencyMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : "EVM RPC health check failed",
+    };
+  }
+}
+
+function resolveEvmRpcDiagnosticUrl(
+  chainId: number,
+  config: ApiConfig,
+): { rpcUrl?: string; source?: "EVM_RPC_URLS" | "RPC_URL" } {
+  if (config.evmRpcUrls[chainId]) return { rpcUrl: config.evmRpcUrls[chainId], source: "EVM_RPC_URLS" };
+  if (config.rpcUrl) return { rpcUrl: config.rpcUrl, source: "RPC_URL" };
+  return {};
+}
+
+function rpcOriginOf(rpcUrl: string): string {
+  try {
+    return new URL(rpcUrl).origin;
+  } catch {
+    return "<configured>";
+  }
 }
 
 function getRuneIndexer(config: ApiConfig): RuneIndexerAdapter {

@@ -1,4 +1,4 @@
-# RedeemLoop Integration Guide v0.4.3 / 集成指南 v0.4.3
+# RedeemLoop Integration Guide v0.4.4 / 集成指南 v0.4.4
 
 ## English
 
@@ -24,7 +24,7 @@ The merchant brings the voucher asset. RedeemLoop does not issue, mint, etch, in
 6. Receive mark-as-paid notifications after settlement confirmation.
 
 For a complete local sandbox, see [Public Merchant Sandbox](PUBLIC_SANDBOX.md). For endpoint-by-endpoint reference, see [API Reference](API_REFERENCE.md).
-For ETH/BSC/POL/ARB wallet support, see [EVM Multi-Chain Wallet Beta](EVM_MULTI_CHAIN_WALLET.md).
+For ETH/BSC/POL/ARB wallet support, see [EVM Multi-Chain Wallet Beta](EVM_MULTI_CHAIN_WALLET.md) and [EVM Live Certification Runbook](EVM_LIVE_CERTIFICATION.md).
 For Bitcoin Rune wallet/indexer beta support, see [Bitcoin Rune Alpha](BITCOIN_RUNE_ALPHA.md) and [Bitcoin Rune Real-Usability Plan](BITCOIN_RUNE_REAL_USABILITY.md).
 
 ### 2.1 Bitcoin Rune Wallet Path
@@ -102,6 +102,7 @@ export function Checkout() {
         balance="1"
         autoSendEvmTransaction
         autoRecheckEvmSettlement
+        onEvent={(event) => console.log(event.type, event)}
         onComplete={(result) => console.log(result.transfer)}
       />
     </RedeemLoopProvider>
@@ -135,6 +136,8 @@ The widget emits DOM events:
 redeemloop:intent
 redeemloop:balance
 redeemloop:transfer
+redeemloop:wallet_connected
+redeemloop:wallet_tx
 redeemloop:broadcasted
 redeemloop:paid
 redeemloop:error
@@ -160,6 +163,8 @@ For multi-chain deployments:
 ```bash
 EVM_RPC_URLS='{"1":"https://eth.example","56":"https://bsc.example","137":"https://polygon.example","42161":"https://arb.example"}'
 ```
+
+Before a pilot run, call `GET /v1/diagnostics/evm-rpc` or `client.getEvmRpcDiagnostics()` to confirm every supported chain has a working RPC. The response reports RPC source and origin without exposing full provider URLs.
 
 ### 7. Embed Origin Controls
 
@@ -289,7 +294,7 @@ Asset Binding -> PaymentIntent -> 提货券转账请求 -> 收券确认 -> 电�
 6. settlement 确认后接收 mark-as-paid 通知。
 
 完整本地 sandbox 请见 [Public Merchant Sandbox](PUBLIC_SANDBOX.md)。逐端点 API reference 请见 [API Reference](API_REFERENCE.md)。
-ETH/BSC/POL/ARB 钱包支持请见 [EVM Multi-Chain Wallet Beta](EVM_MULTI_CHAIN_WALLET.md)。
+ETH/BSC/POL/ARB 钱包支持请见 [EVM Multi-Chain Wallet Beta](EVM_MULTI_CHAIN_WALLET.md) 和 [EVM Live Certification Runbook](EVM_LIVE_CERTIFICATION.md)。
 Bitcoin Rune 钱包/索引器 beta 支持请见 [Bitcoin Rune Alpha](BITCOIN_RUNE_ALPHA.md) 和 [Bitcoin Rune Real-Usability Plan](BITCOIN_RUNE_REAL_USABILITY.md)。
 
 ### 2.1 Bitcoin Rune 钱包路径
@@ -367,6 +372,7 @@ export function Checkout() {
         balance="1"
         autoSendEvmTransaction
         autoRecheckEvmSettlement
+        onEvent={(event) => console.log(event.type, event)}
         onComplete={(result) => console.log(result.transfer)}
       />
     </RedeemLoopProvider>
@@ -400,6 +406,8 @@ widget 会发出 DOM 事件：
 redeemloop:intent
 redeemloop:balance
 redeemloop:transfer
+redeemloop:wallet_connected
+redeemloop:wallet_tx
 redeemloop:broadcasted
 redeemloop:paid
 redeemloop:error
@@ -425,6 +433,8 @@ POST /v1/settlement/evm/recheck/:intentId
 ```bash
 EVM_RPC_URLS='{"1":"https://eth.example","56":"https://bsc.example","137":"https://polygon.example","42161":"https://arb.example"}'
 ```
+
+Pilot run 前，调用 `GET /v1/diagnostics/evm-rpc` 或 `client.getEvmRpcDiagnostics()`，确认每条支持链都有可用 RPC。响应会返回 RPC source 和 origin，但不会暴露完整 provider URL。
 
 ### 7. 嵌入来源控制
 

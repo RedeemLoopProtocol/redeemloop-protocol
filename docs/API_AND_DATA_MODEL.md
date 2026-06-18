@@ -1,4 +1,4 @@
-# RedeemLoop API 与数据模型 v0.4.3
+# RedeemLoop API 与数据模型 v0.4.4
 
 ## 1. REST API
 
@@ -112,7 +112,7 @@ POST /v1/payment-intents/:intentId/cancel
 
 客户端应把 `transaction.to` 作为 ERC-20 合约地址，把 `transaction.data` 作为 calldata，引导用户钱包把指定数量的已有提货资产转入商户收券地址。
 
-v0.4.3 起，React Pay Button 和 script widget 可通过 EIP-1193 注入钱包自动发送 `transfer.evm.transaction`，并支持 Ethereum `1`、BSC `56`、Polygon PoS `137` 和 Arbitrum One `42161` 默认链配置。后端可信 recheck 可通过 `EVM_RPC_URLS` 为不同 chainId 配置不同 RPC。
+v0.4.3 起，React Pay Button 和 script widget 可通过 EIP-1193 注入钱包自动发送 `transfer.evm.transaction`，并支持 Ethereum `1`、BSC `56`、Polygon PoS `137` 和 Arbitrum One `42161` 默认链配置。v0.4.4 起，自动发送流程会先连接钱包并发出结构化事件，后端可信 recheck 可通过 `EVM_RPC_URLS` 为不同 chainId 配置不同 RPC。
 
 对于 Bitcoin / Fractal Rune 资产，`transfer-requested` 在请求体提供 `runeUtxos` 时返回 `transfer.bitcoin.psbtBase64`。该值仍是 wallet adapter integration test 的 PSBT request fixture boundary，不代表生产级 live PSBT engine。真实钱包集成应优先使用 adapter 层 UniSat `sendRunes` 或 Xverse `runes_transfer`，再通过 `POST /v1/settlement/rune/recheck/:intentId` 让 API 使用 `RuneIndexerAdapter` 生成并提交收券 proof。
 
@@ -137,6 +137,14 @@ GET  /v1/webhook-deliveries/:deliveryId
 POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
+
+### Diagnostics
+
+```http
+GET /v1/diagnostics/evm-rpc
+```
+
+该接口按 ETH/BSC/Polygon/Arbitrum 返回 RPC 配置状态、来源、origin、最新块高和延迟，用于 live wallet pilot run 前检查 `EVM_RPC_URLS`。接口不会返回完整 RPC URL。
 
 `payment_intent.paid` events are written to the sandbox outbox when settlement proof or trusted EVM recheck moves a `PaymentIntent` to `paid`. Delivery attempts are signed with `X-RedeemLoop-Event-Id`, `X-RedeemLoop-Delivery-Id`, `X-RedeemLoop-Timestamp`, `X-RedeemLoop-Nonce`, and `X-RedeemLoop-Signature`.
 

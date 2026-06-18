@@ -523,6 +523,64 @@ describe("RedeemLoop API relayer prototype", () => {
     await app.close();
   });
 
+  it("reports chain-specific EVM RPC diagnostics without exposing full RPC secrets", async () => {
+    const checked: Array<{ chainId: number; rpcUrl?: string }> = [];
+    const app = await createApp({
+      chainId: 31337,
+      dryRun: true,
+      evmRpcUrls: {
+        1: "https://eth.example/rpc/private-key",
+        56: "https://bsc.example/rpc",
+      },
+      evmRpcHealthProvider: async (input) => {
+        checked.push(input);
+        return { latestBlockNumber: BigInt(input.chainId * 1000) };
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/diagnostics/evm-rpc",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      checkedAt: expect.any(String),
+      chains: [
+        {
+          chainId: 1,
+          name: "Ethereum Mainnet",
+          status: "ok",
+          rpcConfigured: true,
+          rpcSource: "EVM_RPC_URLS",
+          rpcOrigin: "https://eth.example",
+          latestBlockNumber: "1000",
+          latencyMs: expect.any(Number),
+        },
+        {
+          chainId: 56,
+          status: "ok",
+          rpcOrigin: "https://bsc.example",
+          latestBlockNumber: "56000",
+        },
+        {
+          chainId: 137,
+          status: "missing",
+          rpcConfigured: false,
+        },
+        {
+          chainId: 42161,
+          status: "missing",
+          rpcConfigured: false,
+        },
+      ],
+    });
+    expect(JSON.stringify(response.json())).not.toContain("private-key");
+    expect(checked.map((item) => item.chainId)).toEqual([1, 56]);
+
+    await app.close();
+  });
+
   it("persists v0.2 merchant, PaymentIntent, proof, and idempotency state across restarts", async () => {
     const directory = await mkdtemp(join(tmpdir(), "redeemloop-api-"));
     const storageFile = join(directory, "state.json");
