@@ -430,20 +430,29 @@ describe("RedeemLoop API relayer prototype", () => {
       eventType: "payment_intent.paid",
     });
 
-    const attemptResponse = await app.inject({
+    const drainResponse = await app.inject({
       method: "POST",
-      url: `/v1/webhook-deliveries/${deliveryId}/attempt`,
-    });
-    expect(attemptResponse.statusCode).toBe(200);
-    expect(attemptResponse.json()).toMatchObject({
-      deliveryId,
-      status: "delivered",
-      attempts: 1,
-      responseStatus: 204,
-      request: {
-        method: "POST",
-        url: "https://merchant.example/redeemloop/webhook",
+      url: "/v1/webhook-deliveries/drain-pending",
+      payload: {
+        merchantId: "merchant_webhook",
       },
+    });
+    expect(drainResponse.statusCode).toBe(200);
+    expect(drainResponse.json()).toMatchObject({
+      attempted: 1,
+      delivered: 1,
+      deliveries: [
+        {
+          deliveryId,
+          status: "delivered",
+          attempts: 1,
+          responseStatus: 204,
+          request: {
+            method: "POST",
+            url: "https://merchant.example/redeemloop/webhook",
+          },
+        },
+      ],
     });
     expect(sentRequests).toHaveLength(1);
     expect(JSON.parse(sentRequests[0].rawBody)).toMatchObject({
@@ -577,6 +586,170 @@ describe("RedeemLoop API relayer prototype", () => {
     });
     expect(JSON.stringify(response.json())).not.toContain("private-key");
     expect(checked.map((item) => item.chainId)).toEqual([1, 56]);
+
+    await app.close();
+  });
+
+  it("verifies EVM merchant vault ownership through a signed challenge and records audit logs", async () => {
+    const app = await createApp({ chainId: 31337, dryRun: true });
+
+    await app.inject({
+      method: "POST",
+      url: "/v1/merchants",
+      payload: {
+        merchantId: "merchant_vault_verify",
+        name: "Vault Verify Merchant",
+      },
+    });
+    const vaultResponse = await app.inject({
+      method: "POST",
+      url: "/v1/merchant-vaults",
+      payload: {
+        vaultId: "vault_verify",
+        merchantId: "merchant_vault_verify",
+        chainNamespace: "eip155",
+        chainId: 31337,
+        address: user.address,
+      },
+    });
+    expect(vaultResponse.statusCode).toBe(201);
+    expect(vaultResponse.json()).toMatchObject({ verified: false });
+
+    const challengeResponse = await app.inject({
+      method: "POST",
+      url: "/v1/merchant-vaults/vault_verify/verification-challenge",
+    });
+    expect(challengeResponse.statusCode).toBe(200);
+    expect(challengeResponse.json()).toMatchObject({
+      message: expect.stringContaining("RedeemLoop merchant vault verification"),
+      expiresAt: expect.any(String),
+    });
+
+    const signature = await user.signMessage({ message: challengeResponse.json().message });
+    const verifyResponse = await app.inject({
+      method: "POST",
+      url: "/v1/merchant-vaults/vault_verify/verify-signature",
+      payload: {
+        signature,
+      },
+    });
+    expect(verifyResponse.statusCode).toBe(200);
+    expect(verifyResponse.json()).toMatchObject({
+      vaultId: "vault_verify",
+      verified: true,
+      verifiedAt: expect.any(String),
+    });
+
+    const auditResponse = await app.inject({
+      method: "GET",
+      url: "/v1/audit-logs?merchantId=merchant_vault_verify",
+    });
+    expect(auditResponse.statusCode).toBe(200);
+    expect(auditResponse.json().map((entry: { action: string }) => entry.action)).toEqual([
+      "merchant_vault.created",
+      "merchant_vault.challenge_created",
+      "merchant_vault.verified",
+    ]);
+
+    await app.close();
+  });
+
+  it("expires stale PaymentIntents and records payment audit logs", async () => {
+    const app = await createApp({ chainId: 31337, dryRun: true });
+
+    await app.inject({
+      method: "POST",
+      url: "/v1/merchants",
+      payload: { merchantId: "merchant_expire", name: "Expire Merchant" },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/merchant-vaults",
+      payload: {
+        vaultId: "vault_expire",
+        merchantId: "merchant_expire",
+        chainNamespace: "eip155",
+        chainId: 31337,
+        address: operator,
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/entitlements",
+      payload: {
+        entitlementId: "ent_expire",
+        merchantId: "merchant_expire",
+        name: "Expire pickup",
+        quantity: 1,
+        termsHash: "expire-terms",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/bindings",
+      payload: {
+        bindingId: "bind_expire",
+        merchantId: "merchant_expire",
+        entitlementId: "ent_expire",
+        acceptedAssets: [
+          {
+            chainNamespace: "eip155",
+            chainId: 31337,
+            assetType: "erc20",
+            assetId: `eip155:31337/erc20:${token}`,
+            contract: token,
+            requiredAmount: "1",
+            termsHash: "expire-terms",
+          },
+        ],
+        merchantVaults: { "eip155:31337": operator },
+        settlementPolicy: "collect",
+        commerceTargets: [{ platform: "woocommerce", storeId: "woo-store", sku: "expire-cup" }],
+        status: "active",
+        termsHash: "expire-terms",
+      },
+    });
+    const intentResponse = await app.inject({
+      method: "POST",
+      url: "/v1/payment-intents",
+      payload: {
+        intentId: "pi_expire",
+        bindingId: "bind_expire",
+        orderId: "expire-42",
+        channel: "checkout",
+        skuLines: [{ sku: "expire-cup", quantity: 1 }],
+        expiresAt: "2020-01-01T00:00:00.000Z",
+      },
+    });
+    expect(intentResponse.statusCode).toBe(201);
+
+    const expireResponse = await app.inject({
+      method: "POST",
+      url: "/v1/payment-intents/expire-stale",
+      payload: {
+        merchantId: "merchant_expire",
+      },
+    });
+    expect(expireResponse.statusCode).toBe(200);
+    expect(expireResponse.json()).toMatchObject({
+      expired: 1,
+      intentIds: ["pi_expire"],
+    });
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: "/v1/payment-intents/pi_expire",
+    });
+    expect(getResponse.json()).toMatchObject({ status: "expired" });
+
+    const auditResponse = await app.inject({
+      method: "GET",
+      url: "/v1/audit-logs?merchantId=merchant_expire&entityId=pi_expire",
+    });
+    expect(auditResponse.json().map((entry: { action: string }) => entry.action)).toEqual([
+      "payment_intent.created",
+      "payment_intent.expired",
+    ]);
 
     await app.close();
   });

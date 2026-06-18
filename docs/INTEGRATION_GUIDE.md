@@ -1,4 +1,4 @@
-# RedeemLoop Integration Guide v0.4.4 / 集成指南 v0.4.4
+# RedeemLoop Integration Guide v0.4.5 / 集成指南 v0.4.5
 
 ## English
 
@@ -206,7 +206,23 @@ When API keys are configured, merchant-scoped `/v1` requests must include:
 Authorization: Bearer dev-secret
 ```
 
-### 9. WooCommerce and Shopify
+### 9. Phase 0 Hardening
+
+v0.4.5 adds pilot hardening APIs:
+
+```http
+POST /v1/merchant-vaults/:vaultId/verification-challenge
+POST /v1/merchant-vaults/:vaultId/verify-signature
+POST /v1/payment-intents/expire-stale
+POST /v1/webhook-deliveries/drain-pending
+GET  /v1/audit-logs?merchantId=...
+```
+
+For EVM vault ownership, request a challenge, ask the merchant wallet to sign the returned message, then submit the signature. The API verifies the signature against the vault receiving address.
+
+Run `expire-stale` from a cron or operator task to move old incomplete PaymentIntents to `expired`. Run `drain-pending` from a webhook worker to deliver due webhook records. Audit logs give operators a merchant-scoped trail for vault verification, PaymentIntent state changes, settlement confirmation, and expiration cleanup.
+
+### 10. WooCommerce and Shopify
 
 v0.4.2 includes the sandbox WooCommerce payment gateway plugin at:
 
@@ -230,7 +246,7 @@ The plugin provides:
 
 Shopify should initially use product-page buttons or external/manual payment bridge patterns. Do not block the early protocol on a Shopify payment app review.
 
-### 10. Webhook Delivery Operations
+### 11. Webhook Delivery Operations
 
 When settlement confirmation moves a `PaymentIntent` to `paid`, the API writes a `payment_intent.paid` event and creates delivery records for active matching webhook endpoints.
 
@@ -476,7 +492,23 @@ REDEEMLOOP_API_KEYS='{"merchant_cafe":"dev-secret"}'
 Authorization: Bearer dev-secret
 ```
 
-### 9. WooCommerce 和 Shopify
+### 9. Phase 0 Hardening
+
+v0.4.5 新增 pilot hardening API：
+
+```http
+POST /v1/merchant-vaults/:vaultId/verification-challenge
+POST /v1/merchant-vaults/:vaultId/verify-signature
+POST /v1/payment-intents/expire-stale
+POST /v1/webhook-deliveries/drain-pending
+GET  /v1/audit-logs?merchantId=...
+```
+
+EVM vault ownership 验证流程：先请求 challenge，让商户钱包签名返回的 message，再提交 signature。API 会校验签名地址是否等于 vault 收券地址。
+
+可以用 cron 或 operator task 调用 `expire-stale`，把超时未完成 PaymentIntent 推进到 `expired`。可以用 webhook worker 调用 `drain-pending` 投递到期 webhook 记录。Audit logs 为商户提供 vault 验证、PaymentIntent 状态变化、settlement 确认和过期清理的审计轨迹。
+
+### 10. WooCommerce 和 Shopify
 
 v0.4.2 已包含 WooCommerce sandbox payment gateway 插件：
 
@@ -500,7 +532,7 @@ Checkout payment method -> RedeemLoop Pay Button/widget -> settlement confirmati
 
 Shopify 初期建议采用商品页按钮或 external/manual payment bridge 模式，不要让早期协议阻塞在 Shopify payment app 审核上。
 
-### 10. Webhook 投递运维
+### 11. Webhook 投递运维
 
 当 settlement confirmation 把 `PaymentIntent` 推进到 `paid` 后，API 会写入 `payment_intent.paid` event，并为匹配的 active webhook endpoint 创建 delivery record。
 

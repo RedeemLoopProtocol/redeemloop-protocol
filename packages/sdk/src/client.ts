@@ -3,6 +3,7 @@ import type {
   BroadcastedResponse,
   CheckBalanceInput,
   CheckBalanceResponse,
+  AuditLog,
   ConnectWalletInput,
   CreateBindingInput,
   CreateEntitlementInput,
@@ -11,14 +12,20 @@ import type {
   CreatePaymentIntentInput,
   CreateSettlementProofInput,
   CreateWebhookEndpointInput,
+  DrainWebhookDeliveriesInput,
+  DrainWebhookDeliveriesResponse,
   EvmSettlementRecheckInput,
   EvmSettlementRecheckResponse,
   EvmRpcDiagnosticsResponse,
+  ExpireStalePaymentIntentsInput,
+  ExpireStalePaymentIntentsResponse,
+  ListAuditLogsInput,
   ListBindingsInput,
   ListWebhookDeliveriesInput,
   ListWebhookEventsInput,
   ListMerchantVaultsInput,
   MerchantVault,
+  MerchantVaultVerificationChallengeResponse,
   ReceivingAddressRecord,
   RedeemLoopMerchant,
   ReplayWebhookDeliveryInput,
@@ -70,6 +77,10 @@ export class RedeemLoopClient {
 
   async listMerchantVaults(input: ListMerchantVaultsInput = {}): Promise<MerchantVault[]> {
     return this.request(this.withQuery("/v1/merchant-vaults", input));
+  }
+
+  async requestMerchantVaultVerificationChallenge(vaultId: string): Promise<MerchantVaultVerificationChallengeResponse> {
+    return this.request(`/v1/merchant-vaults/${encodeURIComponent(vaultId)}/verification-challenge`, { method: "POST" });
   }
 
   async verifyMerchantVaultSignature(vaultId: string, input: VerifyMerchantVaultSignatureInput): Promise<MerchantVault> {
@@ -129,6 +140,13 @@ export class RedeemLoopClient {
 
   async createPaymentIntent(input: CreatePaymentIntentInput): Promise<RedeemLoopPaymentIntent> {
     return this.request("/v1/payment-intents", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async expireStalePaymentIntents(input: ExpireStalePaymentIntentsInput = {}): Promise<ExpireStalePaymentIntentsResponse> {
+    return this.request("/v1/payment-intents/expire-stale", {
       method: "POST",
       body: JSON.stringify(input),
     });
@@ -250,6 +268,17 @@ export class RedeemLoopClient {
       method: "POST",
       body: JSON.stringify(input),
     });
+  }
+
+  async drainWebhookDeliveries(input: DrainWebhookDeliveriesInput = {}): Promise<DrainWebhookDeliveriesResponse> {
+    return this.request("/v1/webhook-deliveries/drain-pending", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async listAuditLogs(input: ListAuditLogsInput = {}): Promise<AuditLog[]> {
+    return this.request(this.withQuery("/v1/audit-logs", input));
   }
 
   async setReceivingAddress(merchantId: string, input: SetReceivingAddressInput): Promise<ReceivingAddressRecord> {

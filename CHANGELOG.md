@@ -4,6 +4,35 @@
 
 No unreleased changes yet.
 
+## v0.4.5 - 2026-06-18
+
+### Added
+
+- Signed EVM merchant vault ownership challenge endpoint.
+- Real EVM vault signature verification through `verifyMessage`.
+- PaymentIntent stale expiration cleanup endpoint.
+- Merchant-scoped audit logs for vault verification, PaymentIntent state changes, settlement advancement, and expiration.
+- Webhook delivery `drain-pending` endpoint for worker/cron operation.
+- SDK helpers for vault challenge, stale expiration, webhook drain, and audit log listing.
+
+### Changed
+
+- PaymentIntents are automatically expired on API requests in merchant scope.
+- Webhook delivery tests now cover the background-drain style path.
+- Persistent sandbox snapshots now include audit logs.
+
+### 中文说明
+
+- 新增 EVM merchant vault ownership 签名 challenge endpoint。
+- 通过 `verifyMessage` 执行真实 EVM vault 签名校验。
+- 新增 PaymentIntent stale expiration cleanup endpoint。
+- 新增商户级 audit logs，覆盖 vault verification、PaymentIntent 状态变化、settlement advancement 和 expiration。
+- 新增 webhook delivery `drain-pending` endpoint，用于 worker/cron 运维。
+- SDK 新增 vault challenge、stale expiration、webhook drain 和 audit log 查询 helpers。
+- API 请求会在商户范围内自动清理过期 PaymentIntent。
+- Webhook delivery 测试覆盖 background-drain 风格路径。
+- 持久化 sandbox snapshot 现在包含 audit logs。
+
 ## v0.4.4 - 2026-06-18
 
 ### Added

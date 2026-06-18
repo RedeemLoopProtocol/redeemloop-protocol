@@ -1,4 +1,4 @@
-# RedeemLoop API 与数据模型 v0.4.4
+# RedeemLoop API 与数据模型 v0.4.5
 
 ## 1. REST API
 
@@ -15,6 +15,7 @@ POST /v1/merchants/:merchantId/domains/verify
 ```http
 POST /v1/merchant-vaults
 GET  /v1/merchant-vaults?merchantId=...
+POST /v1/merchant-vaults/:vaultId/verification-challenge
 POST /v1/merchant-vaults/:vaultId/verify-signature
 ```
 
@@ -48,6 +49,7 @@ POST /v1/payment-intents/:intentId/check-balance
 POST /v1/payment-intents/:intentId/transfer-requested
 POST /v1/payment-intents/:intentId/broadcasted
 POST /v1/payment-intents/:intentId/cancel
+POST /v1/payment-intents/expire-stale
 ```
 
 `POST /v1/payment-intents/:intentId/check-balance` 返回 EVM ERC-20 `balanceOf(payer)` call request，并可在传入 `balance` 时判断余额是否足够：
@@ -134,6 +136,7 @@ GET  /v1/webhook-events?merchantId=...
 GET  /v1/webhook-events/:eventId
 GET  /v1/webhook-deliveries?merchantId=...
 GET  /v1/webhook-deliveries/:deliveryId
+POST /v1/webhook-deliveries/drain-pending
 POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
@@ -142,9 +145,11 @@ POST /v1/webhook-deliveries/:deliveryId/replay
 
 ```http
 GET /v1/diagnostics/evm-rpc
+GET /v1/audit-logs?merchantId=...
 ```
 
 该接口按 ETH/BSC/Polygon/Arbitrum 返回 RPC 配置状态、来源、origin、最新块高和延迟，用于 live wallet pilot run 前检查 `EVM_RPC_URLS`。接口不会返回完整 RPC URL。
+`GET /v1/audit-logs` 返回 merchant-scoped 审计记录，覆盖 vault verification、PaymentIntent 状态变化、settlement advancement 和过期清理。
 
 `payment_intent.paid` events are written to the sandbox outbox when settlement proof or trusted EVM recheck moves a `PaymentIntent` to `paid`. Delivery attempts are signed with `X-RedeemLoop-Event-Id`, `X-RedeemLoop-Delivery-Id`, `X-RedeemLoop-Timestamp`, `X-RedeemLoop-Nonce`, and `X-RedeemLoop-Signature`.
 

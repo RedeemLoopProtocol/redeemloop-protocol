@@ -47,6 +47,9 @@ describe("RedeemLoopClient", () => {
       address: "0x0000000000000000000000000000000000000abc",
     });
     await client.listMerchantVaults({ merchantId: "merchant_cafe" });
+    await client.requestMerchantVaultVerificationChallenge("vault_test");
+    await client.verifyMerchantVaultSignature("vault_test", { signature: "0xsig", message: "challenge" });
+    await client.expireStalePaymentIntents({ merchantId: "merchant_cafe" });
     await client.connectWallet("pi_test", { payerAddress: "0x0000000000000000000000000000000000000123" });
     await client.checkBalance("pi_test", {
       payerAddress: "0x0000000000000000000000000000000000000123",
@@ -75,11 +78,16 @@ describe("RedeemLoopClient", () => {
       merchantId: "merchant_cafe",
       url: "https://merchant.example/redeemloop",
     });
+    await client.drainWebhookDeliveries({ merchantId: "merchant_cafe", limit: 10 });
+    await client.listAuditLogs({ merchantId: "merchant_cafe" });
 
     expect(calls.map((call) => call.url)).toEqual([
       "https://api.example.test/v1/merchants",
       "https://api.example.test/v1/merchant-vaults",
       "https://api.example.test/v1/merchant-vaults?merchantId=merchant_cafe",
+      "https://api.example.test/v1/merchant-vaults/vault_test/verification-challenge",
+      "https://api.example.test/v1/merchant-vaults/vault_test/verify-signature",
+      "https://api.example.test/v1/payment-intents/expire-stale",
       "https://api.example.test/v1/payment-intents/pi_test/connect-wallet",
       "https://api.example.test/v1/payment-intents/pi_test/check-balance",
       "https://api.example.test/v1/payment-intents/pi_test/transfer-requested",
@@ -89,6 +97,8 @@ describe("RedeemLoopClient", () => {
       "https://api.example.test/v1/settlement/rune/recheck/pi_test",
       "https://api.example.test/v1/diagnostics/evm-rpc",
       "https://api.example.test/v1/webhook-endpoints",
+      "https://api.example.test/v1/webhook-deliveries/drain-pending",
+      "https://api.example.test/v1/audit-logs?merchantId=merchant_cafe",
     ]);
     expect(calls[0]?.init?.headers).toBeInstanceOf(Headers);
     expect((calls[0]?.init?.headers as Headers).get("authorization")).toBe("Bearer secret");

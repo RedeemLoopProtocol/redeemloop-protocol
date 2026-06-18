@@ -37,6 +37,9 @@ export interface MerchantVault {
   address: string;
   label?: string;
   verified: boolean;
+  verificationMessage?: string;
+  verificationExpiresAt?: string;
+  verifiedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -53,6 +56,12 @@ export interface CreateMerchantVaultInput {
 export interface VerifyMerchantVaultSignatureInput {
   signature: string;
   message?: string;
+}
+
+export interface MerchantVaultVerificationChallengeResponse {
+  vault: MerchantVault;
+  message: string;
+  expiresAt: string;
 }
 
 export interface ListMerchantVaultsInput {
@@ -181,6 +190,16 @@ export interface BroadcastedInput {
 
 export interface BroadcastedResponse extends RedeemLoopPaymentIntent {
   txid: string;
+}
+
+export interface ExpireStalePaymentIntentsInput {
+  merchantId?: string;
+}
+
+export interface ExpireStalePaymentIntentsResponse {
+  checkedAt: string;
+  expired: number;
+  intentIds: string[];
 }
 
 export interface CreateSettlementProofInput extends Partial<VoucherPaymentProof> {
@@ -313,6 +332,20 @@ export interface WebhookDelivery {
   updatedAt: string;
 }
 
+export interface DrainWebhookDeliveriesInput {
+  merchantId?: string;
+  limit?: number;
+}
+
+export interface DrainWebhookDeliveriesResponse {
+  checkedAt: string;
+  attempted: number;
+  delivered: number;
+  failed: number;
+  deadLetter: number;
+  deliveries: WebhookDelivery[];
+}
+
 export interface ListWebhookEventsInput {
   merchantId?: string;
   type?: string;
@@ -339,4 +372,23 @@ export interface ReceivingAddressRecord {
 export interface SetReceivingAddressInput {
   chainId?: number;
   receivingAddress: string;
+}
+
+export interface AuditLog {
+  auditId: string;
+  merchantId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  summary: string;
+  before?: unknown;
+  after?: unknown;
+  createdAt: string;
+}
+
+export interface ListAuditLogsInput {
+  merchantId?: string;
+  entityType?: string;
+  entityId?: string;
+  action?: string;
 }

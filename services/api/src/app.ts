@@ -46,6 +46,7 @@ import {
   parseAbi,
   isHex,
   size,
+  verifyMessage,
   verifyTypedData,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -146,6 +147,10 @@ interface MerchantVaultRecord {
   address: string;
   label?: string;
   verified: boolean;
+  verificationMessage?: string;
+  verificationExpiresAt?: string;
+  verificationSignature?: string;
+  verifiedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -195,6 +200,18 @@ interface WebhookDeliveryRecord {
   };
   createdAt: string;
   updatedAt: string;
+}
+
+interface AuditLogRecord {
+  auditId: string;
+  merchantId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  summary: string;
+  before?: unknown;
+  after?: unknown;
+  createdAt: string;
 }
 
 interface SubmitBody {
@@ -250,6 +267,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
   const webhookEndpoints = new PersistentMap<string, WebhookEndpointRecord>(() => schedulePersist());
   const webhookEvents = new PersistentMap<string, WebhookEventRecord>(() => schedulePersist());
   const webhookDeliveries = new PersistentMap<string, WebhookDeliveryRecord>(() => schedulePersist());
+  const auditLogs = new PersistentMap<string, AuditLogRecord>(() => schedulePersist());
   const resolvedConfig: ApiConfig = {
     chainId: normalizeChainId(config.chainId ?? process.env.CHAIN_ID ?? 31337),
     rpcUrl: config.rpcUrl ?? process.env.RPC_URL,
@@ -298,6 +316,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       webhookEndpoints,
       webhookEvents,
       webhookDeliveries,
+      auditLogs,
       registeredTerminals,
       redemptionSubmissions,
     });
@@ -322,6 +341,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
             webhookEndpoints,
             webhookEvents,
             webhookDeliveries,
+            auditLogs,
             registeredTerminals,
             redemptionSubmissions,
           }),
@@ -350,6 +370,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
           webhookEndpoints,
           webhookEvents,
           webhookDeliveries,
+          auditLogs,
           registeredTerminals,
           redemptionSubmissions,
         }),
@@ -377,7 +398,11 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
   });
 
   app.addHook("preHandler", async (request, reply) => {
-    if (Object.keys(resolvedConfig.apiKeys).length === 0) return;
+    const isExpireStaleRequest = request.url.startsWith("/v1/payment-intents/expire-stale");
+    if (Object.keys(resolvedConfig.apiKeys).length === 0) {
+      if (!isExpireStaleRequest) expireStalePaymentIntents(paymentIntents, auditLogs);
+      return;
+    }
     if (request.method === "OPTIONS") return;
     if (!request.url.startsWith("/v1/")) return;
     const merchantContext = resolveRequestMerchantId(request, {
@@ -398,6 +423,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     if (!hasMerchantApiAccess(request.headers.authorization, merchantContext.merchantId, resolvedConfig.apiKeys)) {
       return reply.code(bearerToken(request.headers.authorization) ? 403 : 401).send({ error: "Invalid merchant API key" });
     }
+    if (!isExpireStaleRequest) expireStalePaymentIntents(paymentIntents, auditLogs, new Date(), merchantContext.merchantId);
   });
 
   app.get("/health", async () => ({
@@ -425,6 +451,19 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     checkedAt: new Date().toISOString(),
     chains: await Promise.all(redeemLoopEvmChains.map((chain) => checkEvmRpcDiagnostic(chain.chainId, chain.name, resolvedConfig))),
   }));
+
+  app.get("/v1/audit-logs", async (request) => {
+    const query = request.query as { merchantId?: string; entityType?: string; entityId?: string; action?: string };
+    return [...auditLogs.values()]
+      .filter((entry) => {
+        if (query.merchantId && entry.merchantId !== query.merchantId) return false;
+        if (query.entityType && entry.entityType !== query.entityType) return false;
+        if (query.entityId && entry.entityId !== query.entityId) return false;
+        if (query.action && entry.action !== query.action) return false;
+        return true;
+      })
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  });
 
   app.post("/v1/merchants", async (request, reply) => {
     try {
@@ -492,6 +531,14 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
         updatedAt: now,
       };
       merchantVaults.set(vault.vaultId, vault);
+      recordAuditLog(auditLogs, {
+        merchantId: vault.merchantId,
+        action: "merchant_vault.created",
+        entityType: "merchant_vault",
+        entityId: vault.vaultId,
+        summary: "Merchant vault created",
+        after: { chainNamespace: vault.chainNamespace, chainId: vault.chainId, address: vault.address, verified: vault.verified },
+      });
 
       if (vault.chainNamespace === "eip155" && vault.chainId !== undefined) {
         merchantReceivers.set(receiverKey(normalizeBytes32(vault.merchantId, "merchantId"), vault.chainId), {
@@ -513,15 +560,75 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     return [...merchantVaults.values()].filter((vault) => !query.merchantId || vault.merchantId === query.merchantId);
   });
 
+  app.post("/v1/merchant-vaults/:vaultId/verification-challenge", async (request, reply) => {
+    try {
+      const params = request.params as { vaultId: string };
+      const vault = merchantVaults.get(params.vaultId);
+      if (!vault) return reply.code(404).send({ error: "Merchant vault not found" });
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
+      const message = merchantVaultVerificationMessage(vault, randomBytes(12).toString("hex"), expiresAt);
+      const updated = {
+        ...vault,
+        verificationMessage: message,
+        verificationExpiresAt: expiresAt,
+        updatedAt: now.toISOString(),
+      };
+      merchantVaults.set(updated.vaultId, updated);
+      recordAuditLog(auditLogs, {
+        merchantId: updated.merchantId,
+        action: "merchant_vault.challenge_created",
+        entityType: "merchant_vault",
+        entityId: updated.vaultId,
+        summary: "Merchant vault verification challenge created",
+      });
+      return {
+        vault: updated,
+        message,
+        expiresAt,
+      };
+    } catch (error) {
+      return reply.code(400).send(errorBody(error));
+    }
+  });
+
   app.post("/v1/merchant-vaults/:vaultId/verify-signature", async (request, reply) => {
     try {
       const params = request.params as { vaultId: string };
       const body = request.body as Record<string, unknown>;
       const vault = merchantVaults.get(params.vaultId);
       if (!vault) return reply.code(404).send({ error: "Merchant vault not found" });
-      requireString(body.signature, "signature");
-      const updated = { ...vault, verified: true, updatedAt: new Date().toISOString() };
+      if (vault.chainNamespace !== "eip155") throw new Error("Signature verification currently supports EVM vaults");
+      const signature = requireString(body.signature, "signature") as Hex;
+      const message = optionalString(body.message, "message") ?? vault.verificationMessage;
+      if (!message) throw new Error("verification challenge is required before signature verification");
+      if (vault.verificationExpiresAt && Date.parse(vault.verificationExpiresAt) < Date.now()) throw new Error("verification challenge has expired");
+      if (vault.verificationMessage && message !== vault.verificationMessage) throw new Error("verification message does not match the active challenge");
+      const valid = await verifyMessage({
+        address: normalizeAddress(vault.address, "vault.address"),
+        message,
+        signature,
+      });
+      if (!valid) return reply.code(400).send({ error: "Invalid merchant vault signature" });
+      const now = new Date().toISOString();
+      const updated = {
+        ...vault,
+        verified: true,
+        verificationMessage: undefined,
+        verificationExpiresAt: undefined,
+        verificationSignature: signature,
+        verifiedAt: now,
+        updatedAt: now,
+      };
       merchantVaults.set(updated.vaultId, updated);
+      recordAuditLog(auditLogs, {
+        merchantId: updated.merchantId,
+        action: "merchant_vault.verified",
+        entityType: "merchant_vault",
+        entityId: updated.vaultId,
+        summary: "Merchant vault ownership verified by signature",
+        after: { address: updated.address, chainId: updated.chainId, verified: true },
+      });
       return updated;
     } catch (error) {
       return reply.code(400).send(errorBody(error));
@@ -647,6 +754,17 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     return updateBindingStatus(request.params as { bindingId: string }, "active", bindings, reply);
   });
 
+  app.post("/v1/payment-intents/expire-stale", async (request) => {
+    const body = recordOf(request.body);
+    const query = recordOf(request.query);
+    const merchantId = optionalString(body.merchantId, "merchantId") ?? optionalString(query.merchantId, "merchantId");
+    const result = expireStalePaymentIntents(paymentIntents, auditLogs, new Date(), merchantId);
+    return {
+      ...result,
+      checkedAt: new Date().toISOString(),
+    };
+  });
+
   app.post("/v1/payment-intents", async (request, reply) => {
     try {
       const body = request.body as Record<string, unknown>;
@@ -679,6 +797,14 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       };
       assertValidPaymentIntent(intent);
       paymentIntents.set(intent.intentId, intent);
+      recordAuditLog(auditLogs, {
+        merchantId: intent.merchantId,
+        action: "payment_intent.created",
+        entityType: "payment_intent",
+        entityId: intent.intentId,
+        summary: "PaymentIntent created",
+        after: { status: intent.status, expiresAt: intent.expiresAt, orderId: intent.orderId },
+      });
       return reply.code(201).send(intent);
     } catch (error) {
       return reply.code(400).send(errorBody(error));
@@ -697,7 +823,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       const body = request.body as Record<string, unknown>;
       const result = updatePaymentIntent(request.params as { intentId: string }, paymentIntents, "wallet_connected", {
         payerAddress: requireString(body.payerAddress, "payerAddress"),
-      });
+      }, auditLogs);
       if (!result) return reply.code(404).send({ error: "PaymentIntent not found" });
       return result;
     } catch (error) {
@@ -715,7 +841,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       const updated = updatePaymentIntent(params, paymentIntents, "asset_selected", {
         selectedAsset: asset,
         merchantVault: findMerchantVaultAddress(bindings.get(intent.bindingId), asset),
-      });
+      }, auditLogs);
       return updated;
     } catch (error) {
       return reply.code(400).send(errorBody(error));
@@ -740,6 +866,15 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
         merchantVault: findMerchantVaultAddress(bindings.get(intent.bindingId), asset),
       });
       paymentIntents.set(updated.intentId, updated);
+      recordAuditLog(auditLogs, {
+        merchantId: updated.merchantId,
+        action: `payment_intent.${updated.status}`,
+        entityType: "payment_intent",
+        entityId: updated.intentId,
+        summary: "PaymentIntent balance checked",
+        before: { status: intent.status },
+        after: { status: updated.status, hasSufficientBalance: balanceCheck.hasSufficientBalance },
+      });
       return {
         ...updated,
         balanceCheck,
@@ -760,7 +895,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
         selectedAsset: asset,
         payerAddress: optionalString(body.payerAddress, "payerAddress") ?? intent.payerAddress,
         merchantVault: findMerchantVaultAddress(bindings.get(intent.bindingId), asset),
-      });
+      }, auditLogs);
       if (!next) return reply.code(404).send({ error: "PaymentIntent not found" });
       return {
         ...next,
@@ -783,7 +918,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       const txid = requireString(body.txid, "txid");
       const updated = updatePaymentIntent(request.params as { intentId: string }, paymentIntents, "broadcasted", {
         broadcastTxid: txid,
-      });
+      }, auditLogs);
       if (!updated) return reply.code(404).send({ error: "PaymentIntent not found" });
       return { ...updated, txid };
     } catch (error) {
@@ -793,7 +928,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
 
   app.post("/v1/payment-intents/:intentId/cancel", async (request, reply) => {
     try {
-      const updated = updatePaymentIntent(request.params as { intentId: string }, paymentIntents, "cancelled");
+      const updated = updatePaymentIntent(request.params as { intentId: string }, paymentIntents, "cancelled", {}, auditLogs);
       if (!updated) return reply.code(404).send({ error: "PaymentIntent not found" });
       return updated;
     } catch (error) {
@@ -840,6 +975,15 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
 
       const nextIntent = advanceIntentFromProof(intent, proof);
       paymentIntents.set(nextIntent.intentId, nextIntent);
+      recordAuditLog(auditLogs, {
+        merchantId: nextIntent.merchantId,
+        action: "payment_intent.settlement_proof",
+        entityType: "payment_intent",
+        entityId: nextIntent.intentId,
+        summary: "PaymentIntent advanced from settlement proof",
+        before: { status: intent.status },
+        after: { status: nextIntent.status, proofId: proof.proofId },
+      });
       const commerce = proof.status === "confirmed" || proof.status === "finalized"
         ? await markIntentCommercePaid(nextIntent, proof, bindings.get(nextIntent.bindingId), resolvedConfig, markPaidIdempotency)
         : undefined;
@@ -924,6 +1068,15 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
 
       const nextIntent = advanceIntentFromProof(intent, proof);
       paymentIntents.set(nextIntent.intentId, nextIntent);
+      recordAuditLog(auditLogs, {
+        merchantId: nextIntent.merchantId,
+        action: "payment_intent.evm_recheck",
+        entityType: "payment_intent",
+        entityId: nextIntent.intentId,
+        summary: "PaymentIntent advanced from trusted EVM recheck",
+        before: { status: intent.status },
+        after: { status: nextIntent.status, proofId: proof.proofId },
+      });
       const commerce = proof.status === "confirmed" || proof.status === "finalized"
         ? await markIntentCommercePaid(nextIntent, proof, bindings.get(nextIntent.bindingId), resolvedConfig, markPaidIdempotency)
         : undefined;
@@ -983,6 +1136,15 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
 
       const nextIntent = advanceIntentFromProof(intent, proof);
       paymentIntents.set(nextIntent.intentId, nextIntent);
+      recordAuditLog(auditLogs, {
+        merchantId: nextIntent.merchantId,
+        action: "payment_intent.rune_recheck",
+        entityType: "payment_intent",
+        entityId: nextIntent.intentId,
+        summary: "PaymentIntent advanced from trusted Rune recheck",
+        before: { status: intent.status },
+        after: { status: nextIntent.status, proofId: proof.proofId },
+      });
       const commerce = proof.status === "confirmed" || proof.status === "finalized"
         ? await markIntentCommercePaid(nextIntent, proof, bindings.get(nextIntent.bindingId), resolvedConfig, markPaidIdempotency)
         : undefined;
@@ -1092,6 +1254,40 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     const delivery = webhookDeliveries.get(params.deliveryId);
     if (!delivery) return reply.code(404).send({ error: "Webhook delivery not found" });
     return delivery;
+  });
+
+  app.post("/v1/webhook-deliveries/drain-pending", async (request) => {
+    const body = recordOf(request.body);
+    const query = recordOf(request.query);
+    const merchantId = optionalString(body.merchantId, "merchantId") ?? optionalString(query.merchantId, "merchantId");
+    const limit = normalizePositiveInteger(body.limit ?? query.limit ?? 25, "limit");
+    const now = new Date();
+    const due = [...webhookDeliveries.values()]
+      .filter((delivery) => {
+        if (merchantId && delivery.merchantId !== merchantId) return false;
+        if (delivery.status !== "pending" && delivery.status !== "failed") return false;
+        if (!delivery.nextAttemptAt) return false;
+        return Date.parse(delivery.nextAttemptAt) <= now.getTime();
+      })
+      .slice(0, limit);
+    const deliveries: WebhookDeliveryRecord[] = [];
+    for (const delivery of due) {
+      deliveries.push(
+        await attemptWebhookDelivery(delivery, {
+          webhookEndpoints,
+          webhookEvents,
+          webhookDeliveries,
+        }, resolvedConfig),
+      );
+    }
+    return {
+      checkedAt: now.toISOString(),
+      attempted: deliveries.length,
+      delivered: deliveries.filter((delivery) => delivery.status === "delivered").length,
+      failed: deliveries.filter((delivery) => delivery.status === "failed").length,
+      deadLetter: deliveries.filter((delivery) => delivery.status === "dead_letter").length,
+      deliveries,
+    };
   });
 
   app.post("/v1/webhook-deliveries/:deliveryId/attempt", async (request, reply) => {
@@ -1469,6 +1665,7 @@ interface SnapshotStores {
   webhookEndpoints: Map<string, WebhookEndpointRecord>;
   webhookEvents: Map<string, WebhookEventRecord>;
   webhookDeliveries: Map<string, WebhookDeliveryRecord>;
+  auditLogs: Map<string, AuditLogRecord>;
   registeredTerminals: Set<string>;
   redemptionSubmissions: Set<string>;
 }
@@ -1490,6 +1687,7 @@ function createApiSnapshot(stores: SnapshotStores): RedeemLoopApiSnapshot {
     webhookEndpoints: [...stores.webhookEndpoints.values()],
     webhookEvents: [...stores.webhookEvents.values()],
     webhookDeliveries: [...stores.webhookDeliveries.values()],
+    auditLogs: [...stores.auditLogs.values()],
     registeredTerminals: [...stores.registeredTerminals.values()],
     redemptionSubmissions: [...stores.redemptionSubmissions.values()],
   };
@@ -1511,6 +1709,7 @@ function hydrateApiSnapshot(snapshot: RedeemLoopApiSnapshot, stores: SnapshotSto
   for (const endpoint of snapshot.webhookEndpoints as WebhookEndpointRecord[]) stores.webhookEndpoints.set(endpoint.id, endpoint);
   for (const event of (snapshot.webhookEvents ?? []) as WebhookEventRecord[]) stores.webhookEvents.set(event.eventId, event);
   for (const delivery of (snapshot.webhookDeliveries ?? []) as WebhookDeliveryRecord[]) stores.webhookDeliveries.set(delivery.deliveryId, delivery);
+  for (const auditLog of (snapshot.auditLogs ?? []) as AuditLogRecord[]) stores.auditLogs.set(auditLog.auditId, auditLog);
   for (const key of snapshot.registeredTerminals ?? []) stores.registeredTerminals.add(key);
   for (const key of snapshot.redemptionSubmissions ?? []) stores.redemptionSubmissions.add(key);
 }
@@ -1573,7 +1772,9 @@ function resolveRequestMerchantId(
     request.url.startsWith("/v1/webhook-events") ||
     request.url.startsWith("/v1/webhook-deliveries") ||
     request.url.startsWith("/v1/merchant-vaults") ||
-    request.url.startsWith("/v1/bindings")
+    request.url.startsWith("/v1/payment-intents/expire-stale") ||
+    request.url.startsWith("/v1/bindings") ||
+    request.url.startsWith("/v1/audit-logs")
   ) {
     return { required: true, error: "merchantId is required when API keys are enabled" };
   }
@@ -1774,6 +1975,7 @@ function updatePaymentIntent(
   paymentIntents: Map<string, RedeemLoopPaymentIntent>,
   status: PaymentIntentStatus,
   patch: Partial<RedeemLoopPaymentIntent> = {},
+  auditLogs?: Map<string, AuditLogRecord>,
 ): RedeemLoopPaymentIntent | undefined {
   const intent = paymentIntents.get(params.intentId);
   if (!intent) return undefined;
@@ -1788,7 +1990,72 @@ function updatePaymentIntent(
   };
   assertValidPaymentIntent(updated);
   paymentIntents.set(updated.intentId, updated);
+  if (auditLogs) {
+    recordAuditLog(auditLogs, {
+      merchantId: updated.merchantId,
+      action: `payment_intent.${status}`,
+      entityType: "payment_intent",
+      entityId: updated.intentId,
+      summary: `PaymentIntent moved to ${status}`,
+      before: { status: intent.status },
+      after: { status: updated.status },
+    });
+  }
   return updated;
+}
+
+function expireStalePaymentIntents(
+  paymentIntents: Map<string, RedeemLoopPaymentIntent>,
+  auditLogs: Map<string, AuditLogRecord>,
+  now = new Date(),
+  merchantId?: string,
+): { expired: number; intentIds: string[] } {
+  const intentIds: string[] = [];
+  for (const intent of paymentIntents.values()) {
+    if (merchantId && intent.merchantId !== merchantId) continue;
+    if (!canTransition(intent.status, "expired")) continue;
+    const expiresAt = Date.parse(intent.expiresAt);
+    if (!Number.isFinite(expiresAt) || expiresAt > now.getTime()) continue;
+    const expired = transitionPaymentIntent(intent, "expired", now);
+    paymentIntents.set(expired.intentId, expired);
+    intentIds.push(expired.intentId);
+    recordAuditLog(auditLogs, {
+      merchantId: expired.merchantId,
+      action: "payment_intent.expired",
+      entityType: "payment_intent",
+      entityId: expired.intentId,
+      summary: "PaymentIntent expired after expiresAt",
+      before: { status: intent.status, expiresAt: intent.expiresAt },
+      after: { status: expired.status },
+    });
+  }
+  return { expired: intentIds.length, intentIds };
+}
+
+function recordAuditLog(
+  auditLogs: Map<string, AuditLogRecord>,
+  input: Omit<AuditLogRecord, "auditId" | "createdAt">,
+): AuditLogRecord {
+  const auditLog: AuditLogRecord = {
+    auditId: randomId("audit"),
+    createdAt: new Date().toISOString(),
+    ...input,
+  };
+  auditLogs.set(auditLog.auditId, auditLog);
+  return auditLog;
+}
+
+function merchantVaultVerificationMessage(vault: MerchantVaultRecord, nonce: string, expiresAt: string): string {
+  return [
+    "RedeemLoop merchant vault verification",
+    `vaultId: ${vault.vaultId}`,
+    `merchantId: ${vault.merchantId}`,
+    `chainNamespace: ${vault.chainNamespace}`,
+    `chainId: ${vault.chainId ?? ""}`,
+    `address: ${vault.address}`,
+    `nonce: ${nonce}`,
+    `expiresAt: ${expiresAt}`,
+  ].join("\n");
 }
 
 function findAcceptedAsset(binding: RedemptionBinding | RedeemLoopPaymentIntent, assetId: string): VoucherAssetDescriptor {

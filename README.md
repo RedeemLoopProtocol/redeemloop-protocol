@@ -38,6 +38,7 @@ This release fixes the first public implementation scope:
 - Trusted EVM ERC-20 settlement recheck from transaction receipts.
 - WooCommerce sandbox payment gateway plugin.
 - Webhook event outbox, signed delivery attempts, retry state, dead-letter status, and replay API.
+- Phase 0 hardening with signed EVM vault ownership challenge, PaymentIntent expiration cleanup, audit logs, and webhook drain worker endpoint.
 - Public Merchant Sandbox with Docker Compose, `.env.example`, environment checks, and API reference docs.
 - Bitcoin Rune Wallet/Indexer Beta adapter surface with UniSat `sendRunes`, Xverse `runes_transfer`, Xverse API-backed Rune balance/UTXO/activity verification, API-level Rune settlement recheck, and a clearly labeled PSBT request fixture boundary.
 - Merchant receiving address / vault confirmation model.
@@ -345,6 +346,7 @@ PaymentIntent
 - 基于 transaction receipt 的可信 EVM ERC-20 settlement recheck。
 - WooCommerce sandbox payment gateway plugin。
 - Webhook event outbox、签名投递、重试状态、dead-letter 状态和 replay API。
+- Phase 0 hardening：EVM vault ownership 签名 challenge、PaymentIntent 过期清理、audit logs 和 webhook drain worker endpoint。
 - Public Merchant Sandbox：Docker Compose、`.env.example`、环境检查和 API reference 文档。
 - Bitcoin Rune Wallet/Indexer Beta adapter surface：UniSat `sendRunes`、Xverse `runes_transfer`、基于 Xverse API 的 Rune balance/UTXO/activity 校验、API-level Rune settlement recheck，以及明确标注的 PSBT request fixture 边界。
 - 商户收券地址 / vault 确认模型。
