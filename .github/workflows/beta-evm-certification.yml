@@ -1,0 +1,106 @@
+name: Beta EVM Wallet Certification Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      chain_id:
+        description: "EVM chain ID that contains the funded ERC-20 transfer."
+        required: true
+        type: string
+      wallet_name:
+        description: "Wallet used for the certification run, for example MetaMask."
+        required: true
+        type: string
+      wallet_version:
+        description: "Wallet version used for the certification run."
+        required: true
+        type: string
+      intent_id:
+        description: "RedeemLoop PaymentIntent ID paid by this transaction."
+        required: true
+        type: string
+      tx_hash:
+        description: "Transaction hash for the funded ERC-20 transfer."
+        required: true
+        type: string
+      from:
+        description: "Payer wallet address."
+        required: true
+        type: string
+      to:
+        description: "Merchant receiving vault address."
+        required: true
+        type: string
+      contract:
+        description: "ERC-20 voucher token contract address."
+        required: true
+        type: string
+      amount:
+        description: "Raw ERC-20 Transfer amount as an integer string."
+        required: true
+        type: string
+      min_confirmations:
+        description: "Minimum confirmations required before accepting the receipt."
+        required: false
+        default: "1"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  evm-certification:
+    name: Generate funded EVM wallet evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EVM_RPC_URLS: ${{ secrets.REDEEMLOOP_EVM_RPC_URLS }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate EVM RPC configuration
+        run: |
+          if [ -z "$EVM_RPC_URLS" ]; then
+            echo "::error::Set the REDEEMLOOP_EVM_RPC_URLS repository secret before running this workflow."
+            exit 1
+          fi
+
+      - name: Generate EVM wallet certification evidence
+        run: |
+          mkdir -p evidence
+          pnpm --silent beta:evidence:evm -- \
+            --chain-id "${{ inputs.chain_id }}" \
+            --wallet-name "${{ inputs.wallet_name }}" \
+            --wallet-version "${{ inputs.wallet_version }}" \
+            --intent-id "${{ inputs.intent_id }}" \
+            --tx-hash "${{ inputs.tx_hash }}" \
+            --from "${{ inputs.from }}" \
+            --to "${{ inputs.to }}" \
+            --contract "${{ inputs.contract }}" \
+            --amount "${{ inputs.amount }}" \
+            --min-confirmations "${{ inputs.min_confirmations }}" \
+            --out evidence/evm-wallet-certification.json
+          node -e "JSON.parse(require('node:fs').readFileSync('evidence/evm-wallet-certification.json', 'utf8'));"
+
+      - name: Upload EVM wallet certification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: redeemloop-evm-wallet-certification-evidence
+          path: evidence/evm-wallet-certification.json
+          if-no-files-found: error

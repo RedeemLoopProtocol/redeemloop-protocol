@@ -1,0 +1,121 @@
+name: Beta WooCommerce Certification Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "RedeemLoop API base URL for the live certification run."
+        required: true
+        type: string
+      store_url:
+        description: "WooCommerce test-store URL."
+        required: true
+        type: string
+      order_id:
+        description: "Live test-store order ID to mark as paid."
+        required: true
+        type: string
+      intent_id:
+        description: "RedeemLoop PaymentIntent ID linked to the order."
+        required: true
+        type: string
+      payment_id:
+        description: "Optional commerce payment ID. Defaults to intent_id."
+        required: false
+        type: string
+      chain_id:
+        description: "EVM chain ID used by the settlement proof."
+        required: true
+        type: string
+      merchant_id:
+        description: "RedeemLoop merchant ID."
+        required: true
+        default: "merchant_cafe"
+        type: string
+      voucher_token:
+        description: "ERC-20 voucher token contract address."
+        required: true
+        type: string
+      amount:
+        description: "Raw voucher amount as an integer string."
+        required: true
+        type: string
+      receiver:
+        description: "Merchant receiving vault address."
+        required: true
+        type: string
+      tx_hash:
+        description: "Optional settlement transaction hash."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  commerce-certification:
+    name: Generate WooCommerce mark-as-paid evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REDEEMLOOP_API_KEY: ${{ secrets.REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate commerce API key
+        run: |
+          if [ -z "$REDEEMLOOP_API_KEY" ]; then
+            echo "::error::Set the REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY repository secret before running this workflow."
+            exit 1
+          fi
+
+      - name: Generate commerce certification evidence
+        env:
+          PAYMENT_ID: ${{ inputs.payment_id }}
+          TX_HASH: ${{ inputs.tx_hash }}
+        run: |
+          mkdir -p evidence
+          args=(
+            --api-base-url "${{ inputs.api_base_url }}"
+            --provider woocommerce
+            --store-url "${{ inputs.store_url }}"
+            --order-id "${{ inputs.order_id }}"
+            --intent-id "${{ inputs.intent_id }}"
+            --chain-id "${{ inputs.chain_id }}"
+            --merchant-id "${{ inputs.merchant_id }}"
+            --voucher-token "${{ inputs.voucher_token }}"
+            --amount "${{ inputs.amount }}"
+            --receiver "${{ inputs.receiver }}"
+            --out evidence/woocommerce-certification.json
+          )
+          if [ -n "$PAYMENT_ID" ]; then
+            args+=(--payment-id "$PAYMENT_ID")
+          fi
+          if [ -n "$TX_HASH" ]; then
+            args+=(--tx-hash "$TX_HASH")
+          fi
+          pnpm --silent beta:evidence:commerce -- "${args[@]}"
+          node -e "JSON.parse(require('node:fs').readFileSync('evidence/woocommerce-certification.json', 'utf8'));"
+
+      - name: Upload commerce certification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: redeemloop-woocommerce-certification-evidence
+          path: evidence/woocommerce-certification.json
+          if-no-files-found: error

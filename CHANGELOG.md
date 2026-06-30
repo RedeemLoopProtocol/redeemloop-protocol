@@ -33,6 +33,8 @@
 - Tightened `pnpm beta:release:gate` so the beta compose-smoke evidence workflow must be present and artifact-producing before release.
 - Added a manual GitHub Actions workflow for production readiness evidence generation using the `REDEEMLOOP_EVM_RPC_URLS` repository secret.
 - Tightened `pnpm beta:release:gate` so the production-readiness evidence workflow must be present and artifact-producing before release.
+- Added manual GitHub Actions workflows for funded EVM wallet and WooCommerce mark-as-paid certification evidence.
+- Tightened `pnpm beta:release:gate` so the EVM wallet and WooCommerce certification workflows must be present before release.
 - Added `pnpm beta:version:prepare` to dry-run or apply a consistent workspace package version before the strict beta release gate.
 - Added bilingual beta readiness guide at `docs/BETA_READINESS.md`.
 - Reworked the official website from a construction/status page into a merchant-facing product homepage.
@@ -71,6 +73,8 @@
 - 收紧 `pnpm beta:release:gate`：发布前必须存在可生成 artifact 的 beta compose-smoke evidence workflow。
 - 新增用于生成 production readiness evidence 的手动 GitHub Actions workflow，通过 `REDEEMLOOP_EVM_RPC_URLS` 仓库 secret 注入 EVM RPC。
 - 收紧 `pnpm beta:release:gate`：发布前必须存在可生成 artifact 的 production-readiness evidence workflow。
+- 新增用于生成 funded EVM wallet 和 WooCommerce mark-as-paid certification evidence 的手动 GitHub Actions workflow。
+- 收紧 `pnpm beta:release:gate`：发布前必须存在 EVM wallet 和 WooCommerce certification workflow。
 - 新增 `pnpm beta:version:prepare`，用于在 strict beta release gate 前 dry-run 或写入一致的 workspace package version。
 - 新增双语 beta readiness 指南：`docs/BETA_READINESS.md`。
 - 将官网从施工说明/工程状态页升级为面向商户的正式产品官网首页。

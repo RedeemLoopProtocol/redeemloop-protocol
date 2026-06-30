@@ -148,6 +148,8 @@ async function checkGithubWorkflows(output) {
   const pages = await readText(".github/workflows/pages.yml", output);
   const composeSmoke = await readText(".github/workflows/beta-compose-smoke.yml", output);
   const productionReadiness = await readText(".github/workflows/beta-production-readiness.yml", output);
+  const evmCertification = await readText(".github/workflows/beta-evm-certification.yml", output);
+  const commerceCertification = await readText(".github/workflows/beta-commerce-certification.yml", output);
 
   if (ci && ci.includes("pnpm install --frozen-lockfile") && ci.includes("pnpm build") && ci.includes("pnpm test")) {
     output.push(pass("github.ci", "CI workflow covers install, test, and build", undefined));
@@ -192,6 +194,37 @@ async function checkGithubWorkflows(output) {
     output.push(pass("github.beta_production_readiness", "Beta production-readiness evidence workflow is present", undefined));
   } else {
     output.push(fail("github.beta_production_readiness", "Beta production-readiness evidence workflow must run compose, collect production readiness JSON, clean up, and upload artifacts", productionReadinessRequirements));
+  }
+
+  const evmCertificationRequirements = {
+    workflowDispatch: evmCertification?.includes("workflow_dispatch:") ?? false,
+    evmRpcSecret: evmCertification?.includes("secrets.REDEEMLOOP_EVM_RPC_URLS") ?? false,
+    frozenInstall: evmCertification?.includes("pnpm install --frozen-lockfile") ?? false,
+    evidenceCommand: evmCertification?.includes("pnpm --silent beta:evidence:evm") ?? false,
+    jsonValidation: evmCertification?.includes("JSON.parse") ?? false,
+    artifactUpload: evmCertification?.includes("actions/upload-artifact") ?? false,
+    artifactName: evmCertification?.includes("redeemloop-evm-wallet-certification-evidence") ?? false,
+  };
+  if (Object.values(evmCertificationRequirements).every(Boolean)) {
+    output.push(pass("github.beta_evm_certification", "Beta EVM wallet certification workflow is present", undefined));
+  } else {
+    output.push(fail("github.beta_evm_certification", "Beta EVM wallet certification workflow must collect receipt evidence and upload an artifact", evmCertificationRequirements));
+  }
+
+  const commerceCertificationRequirements = {
+    workflowDispatch: commerceCertification?.includes("workflow_dispatch:") ?? false,
+    apiKeySecret: commerceCertification?.includes("secrets.REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY") ?? false,
+    frozenInstall: commerceCertification?.includes("pnpm install --frozen-lockfile") ?? false,
+    evidenceCommand: commerceCertification?.includes("pnpm --silent beta:evidence:commerce") ?? false,
+    woocommerceProvider: commerceCertification?.includes("--provider woocommerce") ?? false,
+    jsonValidation: commerceCertification?.includes("JSON.parse") ?? false,
+    artifactUpload: commerceCertification?.includes("actions/upload-artifact") ?? false,
+    artifactName: commerceCertification?.includes("redeemloop-woocommerce-certification-evidence") ?? false,
+  };
+  if (Object.values(commerceCertificationRequirements).every(Boolean)) {
+    output.push(pass("github.beta_woocommerce_certification", "Beta WooCommerce certification workflow is present", undefined));
+  } else {
+    output.push(fail("github.beta_woocommerce_certification", "Beta WooCommerce certification workflow must collect live mark-as-paid evidence and upload an artifact", commerceCertificationRequirements));
   }
 }
 
@@ -325,8 +358,8 @@ Options:
   --json                     Print JSON output.
 
 The gate combines evidence validation, bilingual release-note checks, README/CI/Pages/compose-smoke/
-production-readiness release-surface checks, pnpm settings and frozen-lockfile checks, and workspace version
-consistency before publishing a beta release.
+production-readiness/EVM/WooCommerce release-surface checks, pnpm settings and frozen-lockfile checks, and
+workspace version consistency before publishing a beta release.
 `);
 }
 

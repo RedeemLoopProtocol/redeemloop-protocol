@@ -115,6 +115,8 @@ pnpm --silent beta:evidence:evm -- \
 
 The command does not send transactions or handle private keys. It calls `eth_chainId`, `eth_getTransactionReceipt`, and `eth_blockNumber`, then verifies chain ID, success status, confirmations, sender, ERC-20 contract, receiver, and Transfer amount.
 
+The same check can be run from GitHub Actions with **Beta EVM Wallet Certification Evidence**. Configure `REDEEMLOOP_EVM_RPC_URLS`, run the workflow manually with the real chain ID, wallet name/version, PaymentIntent ID, transaction hash, payer, merchant vault, ERC-20 contract, and amount, then download `evm-wallet-certification.json` into `evidence/evm-wallet-certification.json`.
+
 ### Commerce Evidence
 
 After settlement is confirmed, generate WooCommerce or Shopify mark-as-paid evidence through the RedeemLoop API:
@@ -137,6 +139,8 @@ pnpm --silent beta:evidence:commerce -- \
 ```
 
 The command calls `/v1/commerce/confirm` and expects a live `paid` result. Dry-run artifacts are rejected by the beta evidence validator.
+
+The same WooCommerce certification can be run from GitHub Actions with **Beta WooCommerce Certification Evidence**. Configure `REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY` with a merchant API key for the target RedeemLoop API, run the workflow manually with the live test-store order and settlement fields, then download `woocommerce-certification.json` into `evidence/woocommerce-certification.json`. The workflow is intentionally WooCommerce-specific because WooCommerce is required for the first beta claim; Shopify remains optional unless live Shopify support is claimed.
 
 ### Public Evidence Summary
 
@@ -163,7 +167,7 @@ pnpm beta:release:gate -- \
   --require-version-match
 ```
 
-`beta:version:prepare` is dry-run by default. Add `--write` only after external evidence is real and the beta release tag is chosen. The release gate reruns evidence validation, checks that release notes contain separate English and Chinese sections, rejects placeholder text, checks for obvious secret-like material, verifies README beta-readiness links, checks CI/Pages/compose-smoke/production-readiness evidence workflow presence, verifies active pnpm workspace overrides, runs a frozen lockfile check, and confirms all workspace package versions match the release tag when `--require-version-match` is set.
+`beta:version:prepare` is dry-run by default. Add `--write` only after external evidence is real and the beta release tag is chosen. The release gate reruns evidence validation, checks that release notes contain separate English and Chinese sections, rejects placeholder text, checks for obvious secret-like material, verifies README beta-readiness links, checks CI/Pages/compose-smoke/production-readiness/EVM/WooCommerce evidence workflow presence, verifies active pnpm workspace overrides, runs a frozen lockfile check, and confirms all workspace package versions match the release tag when `--require-version-match` is set.
 
 ## 中文
 
@@ -280,6 +284,8 @@ pnpm --silent beta:evidence:evm -- \
 
 该命令不发交易，也不处理私钥。它只调用 `eth_chainId`、`eth_getTransactionReceipt` 和 `eth_blockNumber`，并校验 chain ID、success status、confirmations、sender、ERC-20 contract、receiver 和 Transfer amount。
 
+同样的检查也可以通过 GitHub Actions 的 **Beta EVM Wallet Certification Evidence** 运行。先配置 `REDEEMLOOP_EVM_RPC_URLS`，再手动运行 workflow，填入真实 chain ID、钱包名称/版本、PaymentIntent ID、交易哈希、付款地址、商户 vault、ERC-20 contract 和 amount，然后把 `evm-wallet-certification.json` 下载到 `evidence/evm-wallet-certification.json`。
+
 ### Commerce Evidence
 
 Settlement 确认后，通过 RedeemLoop API 生成 WooCommerce 或 Shopify mark-as-paid evidence：
@@ -302,6 +308,8 @@ pnpm --silent beta:evidence:commerce -- \
 ```
 
 该命令会调用 `/v1/commerce/confirm`，并要求返回真实 `paid` 结果。Dry-run artifact 会被 beta evidence validator 拒绝。
+
+同样的 WooCommerce certification 可以通过 GitHub Actions 的 **Beta WooCommerce Certification Evidence** 运行。先把目标 RedeemLoop API 的 merchant API key 配置到 `REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY`，再手动运行 workflow，填入 live test-store order 和 settlement 字段，然后把 `woocommerce-certification.json` 下载到 `evidence/woocommerce-certification.json`。该 workflow 故意限定为 WooCommerce，因为首个 beta 必须覆盖 WooCommerce；除非声明 Shopify live support，否则 Shopify 仍是可选证据。
 
 ### 公开证据摘要
 
@@ -328,4 +336,4 @@ pnpm beta:release:gate -- \
   --require-version-match
 ```
 
-`beta:version:prepare` 默认是 dry-run。只有在外部证据真实齐备、beta release tag 已确定后，才添加 `--write`。该 release gate 会重新运行 evidence validation，检查 release notes 是否包含独立 English 和中文章节，拒绝占位文本，检查明显 secret-like material，确认 README beta-readiness 链接，检查 CI/Pages/compose-smoke/production-readiness evidence workflow 是否存在，确认 pnpm workspace overrides 处于有效配置位置，运行 frozen lockfile 检查，并在设置 `--require-version-match` 时确认所有 workspace package version 与 release tag 一致。
+`beta:version:prepare` 默认是 dry-run。只有在外部证据真实齐备、beta release tag 已确定后，才添加 `--write`。该 release gate 会重新运行 evidence validation，检查 release notes 是否包含独立 English 和中文章节，拒绝占位文本，检查明显 secret-like material，确认 README beta-readiness 链接，检查 CI/Pages/compose-smoke/production-readiness/EVM/WooCommerce evidence workflow 是否存在，确认 pnpm workspace overrides 处于有效配置位置，运行 frozen lockfile 检查，并在设置 `--require-version-match` 时确认所有 workspace package version 与 release tag 一致。
