@@ -31,6 +31,6 @@ RUN pnpm --filter @redeemloop/core build \
 
 ENV NODE_ENV=production
 
-EXPOSE 8787 3000
+EXPOSE 3002 3000
 
 CMD ["pnpm", "--filter", "@redeemloop/api", "start"]

@@ -1,5 +1,5 @@
 import cors from "@fastify/cors";
-import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   buildErc20BalanceCheckRequest,
@@ -79,7 +79,7 @@ import {
   normalizeUintString,
   toContractAuthorization,
 } from "./typedData.js";
-import { createJsonFilePersistence, type RedeemLoopApiSnapshot } from "./persistence.js";
+import { createApiPersistence, type ApiPersistence, type RedeemLoopApiSnapshot } from "./persistence.js";
 
 interface ApiConfig {
   chainId: number;
@@ -89,6 +89,9 @@ interface ApiConfig {
   dryRun: boolean;
   embedAllowedOrigins: string[];
   storageFile?: string;
+  databaseUrl?: string;
+  databaseSnapshotKey?: string;
+  persistence?: ApiPersistence;
   apiKeys: Record<string, string>;
   evmMinConfirmations: number;
   evmReceiptProvider?: (input: { txid: Hex; chainId: number; rpcUrl?: string }) => Promise<{
@@ -103,6 +106,8 @@ interface ApiConfig {
   xverseNetwork: RuneIndexerNetwork;
   xverseApiBaseUrl?: string;
   webhookMaxAttempts: number;
+  webhookDeliveryLeaseMs: number;
+  webhookRequestTimeoutMs: number;
   webhookDeliverySender?: (request: WebhookDeliveryRequest) => Promise<WebhookDeliverySenderResult>;
   shopifyShopDomain?: string;
   shopifyAdminAccessToken?: string;
@@ -112,9 +117,25 @@ interface ApiConfig {
   woocommerceConsumerKey?: string;
   woocommerceConsumerSecret?: string;
   woocommerceWebhookSecret?: string;
+  rateLimitEnabled: boolean;
+  rateLimitWindowMs: number;
+  rateLimitMax: number;
 }
 
-type WebhookDeliveryStatus = "pending" | "delivered" | "failed" | "dead_letter";
+interface RateLimitBucket {
+  count: number;
+  resetAt: number;
+}
+
+interface RateLimitResult {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  resetAt: number;
+  retryAfterSeconds: number;
+}
+
+type WebhookDeliveryStatus = "pending" | "processing" | "delivered" | "failed" | "dead_letter";
 
 interface WebhookDeliveryRequest {
   deliveryId: string;
@@ -190,6 +211,9 @@ interface WebhookDeliveryRecord {
   nextAttemptAt?: string;
   lastAttemptAt?: string;
   deliveredAt?: string;
+  leaseOwner?: string;
+  leaseAcquiredAt?: string;
+  leaseExpiresAt?: string;
   lastError?: string;
   responseStatus?: number;
   responseBody?: unknown;
@@ -200,6 +224,17 @@ interface WebhookDeliveryRecord {
     body: unknown;
   };
   createdAt: string;
+  updatedAt: string;
+}
+
+interface WebhookWorkerDrainRecord {
+  workerId: string;
+  merchantId?: string;
+  checkedAt: string;
+  attempted: number;
+  delivered: number;
+  failed: number;
+  deadLetter: number;
   updatedAt: string;
 }
 
@@ -290,7 +325,9 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
   const webhookEndpoints = new PersistentMap<string, WebhookEndpointRecord>(() => schedulePersist());
   const webhookEvents = new PersistentMap<string, WebhookEventRecord>(() => schedulePersist());
   const webhookDeliveries = new PersistentMap<string, WebhookDeliveryRecord>(() => schedulePersist());
+  const webhookWorkerDrains = new PersistentMap<string, WebhookWorkerDrainRecord>(() => schedulePersist());
   const auditLogs = new PersistentMap<string, AuditLogRecord>(() => schedulePersist());
+  const rateLimitBuckets = new Map<string, RateLimitBucket>();
   const resolvedConfig: ApiConfig = {
     chainId: normalizeChainId(config.chainId ?? process.env.CHAIN_ID ?? 31337),
     rpcUrl: config.rpcUrl ?? process.env.RPC_URL,
@@ -303,6 +340,9 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
         "http://localhost:3000,http://127.0.0.1:3000",
     ),
     storageFile: config.storageFile ?? process.env.REDEEMLOOP_STORAGE_FILE,
+    databaseUrl: config.databaseUrl ?? process.env.REDEEMLOOP_DATABASE_URL,
+    databaseSnapshotKey: config.databaseSnapshotKey ?? process.env.REDEEMLOOP_DATABASE_SNAPSHOT_KEY,
+    persistence: config.persistence,
     apiKeys: parseMerchantApiKeys(config.apiKeys ?? process.env.REDEEMLOOP_API_KEYS),
     evmMinConfirmations: normalizePositiveInteger(config.evmMinConfirmations ?? process.env.EVM_MIN_CONFIRMATIONS ?? 1, "evmMinConfirmations"),
     evmReceiptProvider: config.evmReceiptProvider,
@@ -312,6 +352,8 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     xverseNetwork: normalizeRuneIndexerNetwork(config.xverseNetwork ?? process.env.XVERSE_NETWORK ?? "mainnet"),
     xverseApiBaseUrl: config.xverseApiBaseUrl ?? process.env.XVERSE_API_BASE_URL,
     webhookMaxAttempts: normalizePositiveInteger(config.webhookMaxAttempts ?? process.env.WEBHOOK_MAX_ATTEMPTS ?? 5, "webhookMaxAttempts"),
+    webhookDeliveryLeaseMs: normalizePositiveInteger(config.webhookDeliveryLeaseMs ?? process.env.WEBHOOK_DELIVERY_LEASE_MS ?? 60_000, "webhookDeliveryLeaseMs"),
+    webhookRequestTimeoutMs: normalizePositiveInteger(config.webhookRequestTimeoutMs ?? process.env.WEBHOOK_REQUEST_TIMEOUT_MS ?? 15_000, "webhookRequestTimeoutMs"),
     webhookDeliverySender: config.webhookDeliverySender,
     shopifyShopDomain: config.shopifyShopDomain ?? process.env.SHOPIFY_SHOP_DOMAIN,
     shopifyAdminAccessToken: config.shopifyAdminAccessToken ?? process.env.SHOPIFY_ADMIN_ACCESS_TOKEN,
@@ -321,8 +363,17 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     woocommerceConsumerKey: config.woocommerceConsumerKey ?? process.env.WOOCOMMERCE_CONSUMER_KEY,
     woocommerceConsumerSecret: config.woocommerceConsumerSecret ?? process.env.WOOCOMMERCE_CONSUMER_SECRET,
     woocommerceWebhookSecret: config.woocommerceWebhookSecret ?? process.env.WOOCOMMERCE_WEBHOOK_SECRET,
+    rateLimitEnabled: config.rateLimitEnabled ?? process.env.RATE_LIMIT_DISABLED !== "true",
+    rateLimitWindowMs: normalizePositiveInteger(config.rateLimitWindowMs ?? process.env.RATE_LIMIT_WINDOW_MS ?? 60_000, "rateLimitWindowMs"),
+    rateLimitMax: normalizePositiveInteger(config.rateLimitMax ?? process.env.RATE_LIMIT_MAX ?? 300, "rateLimitMax"),
   };
-  const persistence = createJsonFilePersistence(resolvedConfig.storageFile);
+  const persistence =
+    resolvedConfig.persistence ??
+    createApiPersistence({
+      storageFile: resolvedConfig.storageFile,
+      databaseUrl: resolvedConfig.databaseUrl,
+      snapshotKey: resolvedConfig.databaseSnapshotKey,
+    });
   const snapshot = await persistence.load();
   if (snapshot) {
     hydrateApiSnapshot(snapshot, {
@@ -339,6 +390,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       webhookEndpoints,
       webhookEvents,
       webhookDeliveries,
+      webhookWorkerDrains,
       auditLogs,
       shortLinks,
       publicPaymentSessions,
@@ -367,6 +419,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
             webhookEndpoints,
             webhookEvents,
             webhookDeliveries,
+            webhookWorkerDrains,
             auditLogs,
             shortLinks,
             publicPaymentSessions,
@@ -382,31 +435,36 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
   };
 
   app.addHook("onClose", async () => {
-    await persistQueue;
-    if (persistence.enabled) {
-      await persistence.save(
-        createApiSnapshot({
-          merchants,
-          merchantVaults,
-          merchantReceivers,
-          commercePayments,
-          entitlements,
-          bindings,
-          paymentIntents,
-          settlementProofs,
-          proofIdempotency,
-          markPaidIdempotency,
-          webhookEndpoints,
-          webhookEvents,
-          webhookDeliveries,
-          auditLogs,
-          shortLinks,
-          publicPaymentSessions,
-          registeredTerminals,
-          terminalPaymentNonces,
-          redemptionSubmissions,
-        }),
-      );
+    try {
+      await persistQueue;
+      if (persistence.enabled) {
+        await persistence.save(
+          createApiSnapshot({
+            merchants,
+            merchantVaults,
+            merchantReceivers,
+            commercePayments,
+            entitlements,
+            bindings,
+            paymentIntents,
+            settlementProofs,
+            proofIdempotency,
+            markPaidIdempotency,
+            webhookEndpoints,
+            webhookEvents,
+            webhookDeliveries,
+            webhookWorkerDrains,
+            auditLogs,
+            shortLinks,
+            publicPaymentSessions,
+            registeredTerminals,
+            terminalPaymentNonces,
+            redemptionSubmissions,
+          }),
+        );
+      }
+    } finally {
+      await persistence.close?.();
     }
   });
 
@@ -427,6 +485,18 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     origin: (origin, callback) => {
       callback(null, isAllowedEmbedOrigin(origin, resolvedConfig, merchants));
     },
+  });
+
+  app.addHook("preHandler", async (request, reply) => {
+    const result = consumeRateLimit(request, resolvedConfig, rateLimitBuckets);
+    if (!result) return;
+    setRateLimitHeaders(reply, result);
+    if (!result.allowed) {
+      return reply.code(429).send({
+        error: "Rate limit exceeded",
+        retryAfterSeconds: result.retryAfterSeconds,
+      });
+    }
   });
 
   app.addHook("preHandler", async (request, reply) => {
@@ -471,8 +541,21 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     embedAllowedOrigins: resolvedConfig.embedAllowedOrigins.includes("*") ? ["*"] : resolvedConfig.embedAllowedOrigins,
     evmMinConfirmations: resolvedConfig.evmMinConfirmations,
     webhookMaxAttempts: resolvedConfig.webhookMaxAttempts,
+    webhookDeliveryLeaseMs: resolvedConfig.webhookDeliveryLeaseMs,
+    webhookRequestTimeoutMs: resolvedConfig.webhookRequestTimeoutMs,
+    rateLimit: {
+      enabled: resolvedConfig.rateLimitEnabled,
+      windowMs: resolvedConfig.rateLimitWindowMs,
+      max: resolvedConfig.rateLimitMax,
+    },
+    cors: {
+      allowedOrigins: resolvedConfig.embedAllowedOrigins.includes("*") ? ["*"] : resolvedConfig.embedAllowedOrigins,
+      wildcardAllowed: resolvedConfig.embedAllowedOrigins.includes("*"),
+      verifiedMerchantDomains: countVerifiedMerchantDomains(merchants),
+    },
     persistence: {
       enabled: persistence.enabled,
+      kind: persistence.kind,
     },
     auth: {
       apiKeysEnabled: Object.keys(resolvedConfig.apiKeys).length > 0,
@@ -488,6 +571,19 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     checkedAt: new Date().toISOString(),
     diagnostics: getShopifyAdapterDiagnostics(commerceAdapterConfig(resolvedConfig)),
   }));
+
+  app.get("/v1/diagnostics/webhooks", async (request) => {
+    const query = recordOf(request.query);
+    return getWebhookOperationsDiagnostics({
+      webhookDeliveries,
+      webhookWorkerDrains,
+    }, {
+      merchantId: optionalString(query.merchantId, "merchantId"),
+      now: new Date(),
+      staleProcessingMs: normalizePositiveInteger(query.staleProcessingMs ?? 5 * 60_000, "staleProcessingMs"),
+      noDrainMs: normalizePositiveInteger(query.noDrainMs ?? 10 * 60_000, "noDrainMs"),
+    });
+  });
 
   app.get("/v1/audit-logs", async (request) => {
     const query = request.query as { merchantId?: string; entityType?: string; entityId?: string; action?: string };
@@ -1625,15 +1721,14 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
     const query = recordOf(request.query);
     const merchantId = optionalString(body.merchantId, "merchantId") ?? optionalString(query.merchantId, "merchantId");
     const limit = normalizePositiveInteger(body.limit ?? query.limit ?? 25, "limit");
+    const workerId = optionalString(body.workerId, "workerId") ?? optionalString(query.workerId, "workerId") ?? "api-drain";
+    const leaseMs = normalizePositiveInteger(body.leaseMs ?? query.leaseMs ?? resolvedConfig.webhookDeliveryLeaseMs, "leaseMs");
     const now = new Date();
-    const due = [...webhookDeliveries.values()]
-      .filter((delivery) => {
-        if (merchantId && delivery.merchantId !== merchantId) return false;
-        if (delivery.status !== "pending" && delivery.status !== "failed") return false;
-        if (!delivery.nextAttemptAt) return false;
-        return Date.parse(delivery.nextAttemptAt) <= now.getTime();
-      })
-      .slice(0, limit);
+    const due = claimDueWebhookDeliveries({
+      webhookEndpoints,
+      webhookEvents,
+      webhookDeliveries,
+    }, { merchantId, limit, now, workerId, leaseMs });
     const deliveries: WebhookDeliveryRecord[] = [];
     for (const delivery of due) {
       deliveries.push(
@@ -1644,7 +1739,7 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
         }, resolvedConfig),
       );
     }
-    return {
+    const result = {
       checkedAt: now.toISOString(),
       attempted: deliveries.length,
       delivered: deliveries.filter((delivery) => delivery.status === "delivered").length,
@@ -1652,6 +1747,17 @@ export async function createApp(config: Partial<ApiConfig> = {}): Promise<Fastif
       deadLetter: deliveries.filter((delivery) => delivery.status === "dead_letter").length,
       deliveries,
     };
+    webhookWorkerDrains.set(webhookWorkerDrainKey(workerId, merchantId), {
+      workerId,
+      merchantId,
+      checkedAt: result.checkedAt,
+      attempted: result.attempted,
+      delivered: result.delivered,
+      failed: result.failed,
+      deadLetter: result.deadLetter,
+      updatedAt: result.checkedAt,
+    });
+    return result;
   });
 
   app.post("/v1/webhook-deliveries/:deliveryId/attempt", async (request, reply) => {
@@ -2029,6 +2135,7 @@ interface SnapshotStores {
   webhookEndpoints: Map<string, WebhookEndpointRecord>;
   webhookEvents: Map<string, WebhookEventRecord>;
   webhookDeliveries: Map<string, WebhookDeliveryRecord>;
+  webhookWorkerDrains: Map<string, WebhookWorkerDrainRecord>;
   auditLogs: Map<string, AuditLogRecord>;
   shortLinks: Map<string, ShortPaymentLinkRecord>;
   publicPaymentSessions: Map<string, PublicPaymentSessionRecord>;
@@ -2054,6 +2161,7 @@ function createApiSnapshot(stores: SnapshotStores): RedeemLoopApiSnapshot {
     webhookEndpoints: [...stores.webhookEndpoints.values()],
     webhookEvents: [...stores.webhookEvents.values()],
     webhookDeliveries: [...stores.webhookDeliveries.values()],
+    webhookWorkerDrains: [...stores.webhookWorkerDrains.values()],
     auditLogs: [...stores.auditLogs.values()],
     shortLinks: [...stores.shortLinks.values()],
     publicPaymentSessions: [...stores.publicPaymentSessions.values()],
@@ -2079,6 +2187,9 @@ function hydrateApiSnapshot(snapshot: RedeemLoopApiSnapshot, stores: SnapshotSto
   for (const endpoint of snapshot.webhookEndpoints as WebhookEndpointRecord[]) stores.webhookEndpoints.set(endpoint.id, endpoint);
   for (const event of (snapshot.webhookEvents ?? []) as WebhookEventRecord[]) stores.webhookEvents.set(event.eventId, event);
   for (const delivery of (snapshot.webhookDeliveries ?? []) as WebhookDeliveryRecord[]) stores.webhookDeliveries.set(delivery.deliveryId, delivery);
+  for (const drain of (snapshot.webhookWorkerDrains ?? []) as WebhookWorkerDrainRecord[]) {
+    stores.webhookWorkerDrains.set(webhookWorkerDrainKey(drain.workerId, drain.merchantId), drain);
+  }
   for (const auditLog of (snapshot.auditLogs ?? []) as AuditLogRecord[]) stores.auditLogs.set(auditLog.auditId, auditLog);
   for (const shortLink of (snapshot.shortLinks ?? []) as ShortPaymentLinkRecord[]) stores.shortLinks.set(shortLink.slug, shortLink);
   for (const publicSession of (snapshot.publicPaymentSessions ?? []) as PublicPaymentSessionRecord[]) {
@@ -2147,6 +2258,7 @@ function resolveRequestMerchantId(
     request.url.startsWith("/v1/webhook-endpoints") ||
     request.url.startsWith("/v1/webhook-events") ||
     request.url.startsWith("/v1/webhook-deliveries") ||
+    request.url.startsWith("/v1/diagnostics/webhooks") ||
     request.url.startsWith("/v1/merchant-vaults") ||
     request.url.startsWith("/v1/payment-intents/expire-stale") ||
     request.url === "/v1/payment-intents" ||
@@ -2212,6 +2324,46 @@ function bearerToken(authorization: string | string[] | undefined): string | und
   const header = Array.isArray(authorization) ? authorization[0] : authorization;
   if (!header?.startsWith("Bearer ")) return undefined;
   return header.slice("Bearer ".length);
+}
+
+function consumeRateLimit(
+  request: FastifyRequest,
+  config: ApiConfig,
+  buckets: Map<string, RateLimitBucket>,
+): RateLimitResult | undefined {
+  if (!config.rateLimitEnabled) return undefined;
+  if (request.method === "OPTIONS") return undefined;
+  if (!request.url.startsWith("/v1/")) return undefined;
+
+  const now = Date.now();
+  const key = rateLimitKey(request);
+  const existing = buckets.get(key);
+  const bucket = existing && existing.resetAt > now ? existing : { count: 0, resetAt: now + config.rateLimitWindowMs };
+  bucket.count += 1;
+  buckets.set(key, bucket);
+
+  const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+  const remaining = Math.max(0, config.rateLimitMax - bucket.count);
+  return {
+    allowed: bucket.count <= config.rateLimitMax,
+    limit: config.rateLimitMax,
+    remaining,
+    resetAt: bucket.resetAt,
+    retryAfterSeconds,
+  };
+}
+
+function rateLimitKey(request: FastifyRequest): string {
+  const token = bearerToken(request.headers.authorization);
+  if (token) return `bearer:${createHash("sha256").update(token).digest("hex")}`;
+  return `ip:${request.ip ?? request.socket?.remoteAddress ?? "unknown"}`;
+}
+
+function setRateLimitHeaders(reply: FastifyReply, result: RateLimitResult): void {
+  reply.header("X-RateLimit-Limit", String(result.limit));
+  reply.header("X-RateLimit-Remaining", String(result.remaining));
+  reply.header("X-RateLimit-Reset", String(Math.ceil(result.resetAt / 1000)));
+  if (!result.allowed) reply.header("Retry-After", String(result.retryAfterSeconds));
 }
 
 function constantTimeEquals(left: string, right: string): boolean {
@@ -2967,6 +3119,135 @@ function createWebhookDelivery(
   };
 }
 
+function claimDueWebhookDeliveries(
+  stores: WebhookOutboxStores,
+  options: { merchantId?: string; limit: number; now: Date; workerId: string; leaseMs: number },
+): WebhookDeliveryRecord[] {
+  const claimed: WebhookDeliveryRecord[] = [];
+  for (const delivery of stores.webhookDeliveries.values()) {
+    if (claimed.length >= options.limit) break;
+    if (options.merchantId && delivery.merchantId !== options.merchantId) continue;
+    if (!isWebhookDeliveryDue(delivery, options.now)) continue;
+
+    const nowIso = options.now.toISOString();
+    const next: WebhookDeliveryRecord = {
+      ...delivery,
+      status: "processing",
+      leaseOwner: options.workerId,
+      leaseAcquiredAt: nowIso,
+      leaseExpiresAt: new Date(options.now.getTime() + options.leaseMs).toISOString(),
+      updatedAt: nowIso,
+    };
+    stores.webhookDeliveries.set(next.deliveryId, next);
+    claimed.push(next);
+  }
+  return claimed;
+}
+
+function isWebhookDeliveryDue(delivery: WebhookDeliveryRecord, now: Date): boolean {
+  if (delivery.status === "pending" || delivery.status === "failed") {
+    const nextAttemptAt = delivery.nextAttemptAt;
+    if (!nextAttemptAt) return false;
+    return Date.parse(nextAttemptAt) <= now.getTime();
+  }
+  if (delivery.status === "processing") {
+    const leaseExpiresAt = delivery.leaseExpiresAt;
+    if (!leaseExpiresAt) return false;
+    return Date.parse(leaseExpiresAt) <= now.getTime();
+  }
+  return false;
+}
+
+function getWebhookOperationsDiagnostics(
+  stores: { webhookDeliveries: Map<string, WebhookDeliveryRecord>; webhookWorkerDrains: Map<string, WebhookWorkerDrainRecord> },
+  options: { merchantId?: string; now: Date; staleProcessingMs: number; noDrainMs: number },
+) {
+  const nowMs = options.now.getTime();
+  const deliveries = [...stores.webhookDeliveries.values()].filter((delivery) => !options.merchantId || delivery.merchantId === options.merchantId);
+  const recentDrains = [...stores.webhookWorkerDrains.values()]
+    .filter((drain) => !options.merchantId || !drain.merchantId || drain.merchantId === options.merchantId)
+    .sort((left, right) => Date.parse(right.checkedAt) - Date.parse(left.checkedAt));
+  const latestDrainAt = recentDrains[0]?.checkedAt;
+  const noRecentDrain = !latestDrainAt || Date.parse(latestDrainAt) < nowMs - options.noDrainMs;
+  const staleProcessing = deliveries.filter((delivery) => isStaleProcessingDelivery(delivery, nowMs, options.staleProcessingMs));
+  const counts = countWebhookDeliveryStatuses(deliveries);
+  const recommendedActions = webhookDiagnosticActions(counts, staleProcessing.length, noRecentDrain);
+
+  return {
+    checkedAt: options.now.toISOString(),
+    merchantId: options.merchantId,
+    thresholds: {
+      staleProcessingMs: options.staleProcessingMs,
+      noDrainMs: options.noDrainMs,
+    },
+    deliveries: {
+      ...counts,
+      staleProcessing: staleProcessing.length,
+    },
+    worker: {
+      latestDrainAt,
+      noRecentDrain,
+      recentDrains: recentDrains.slice(0, 10),
+    },
+    staleProcessing: staleProcessing.slice(0, 25).map(summarizeWebhookDelivery),
+    recommendedActions,
+  };
+}
+
+function isStaleProcessingDelivery(delivery: WebhookDeliveryRecord, nowMs: number, staleProcessingMs: number): boolean {
+  if (delivery.status !== "processing") return false;
+  if (delivery.leaseExpiresAt && Date.parse(delivery.leaseExpiresAt) <= nowMs) return true;
+  if (delivery.leaseAcquiredAt && Date.parse(delivery.leaseAcquiredAt) <= nowMs - staleProcessingMs) return true;
+  return false;
+}
+
+function countWebhookDeliveryStatuses(deliveries: WebhookDeliveryRecord[]) {
+  return {
+    total: deliveries.length,
+    pending: deliveries.filter((delivery) => delivery.status === "pending").length,
+    processing: deliveries.filter((delivery) => delivery.status === "processing").length,
+    delivered: deliveries.filter((delivery) => delivery.status === "delivered").length,
+    failed: deliveries.filter((delivery) => delivery.status === "failed").length,
+    deadLetter: deliveries.filter((delivery) => delivery.status === "dead_letter").length,
+  };
+}
+
+function summarizeWebhookDelivery(delivery: WebhookDeliveryRecord) {
+  return {
+    deliveryId: delivery.deliveryId,
+    eventId: delivery.eventId,
+    endpointId: delivery.endpointId,
+    merchantId: delivery.merchantId,
+    status: delivery.status,
+    attempts: delivery.attempts,
+    maxAttempts: delivery.maxAttempts,
+    nextAttemptAt: delivery.nextAttemptAt,
+    lastAttemptAt: delivery.lastAttemptAt,
+    leaseOwner: delivery.leaseOwner,
+    leaseAcquiredAt: delivery.leaseAcquiredAt,
+    leaseExpiresAt: delivery.leaseExpiresAt,
+    lastError: delivery.lastError,
+  };
+}
+
+function webhookDiagnosticActions(
+  counts: ReturnType<typeof countWebhookDeliveryStatuses>,
+  staleProcessingCount: number,
+  noRecentDrain: boolean,
+): string[] {
+  const actions: string[] = [];
+  if (noRecentDrain) actions.push("Start or inspect the webhook worker; no recent drain heartbeat is available.");
+  if (staleProcessingCount > 0) actions.push("Inspect stale processing deliveries and replay them after confirming downstream idempotency.");
+  if (counts.deadLetter > 0) actions.push("Review dead-letter deliveries and replay after fixing the merchant endpoint.");
+  if (counts.failed > 0) actions.push("Check failed deliveries; they will retry when nextAttemptAt is due.");
+  if (actions.length === 0) actions.push("No immediate webhook delivery action required.");
+  return actions;
+}
+
+function webhookWorkerDrainKey(workerId: string, merchantId: string | undefined): string {
+  return `${merchantId ?? "*"}:${workerId}`;
+}
+
 async function attemptWebhookDelivery(
   delivery: WebhookDeliveryRecord,
   stores: WebhookOutboxStores,
@@ -2982,7 +3263,7 @@ async function attemptWebhookDelivery(
   const attemptCount = delivery.attempts + 1;
   const attemptedAt = new Date().toISOString();
   try {
-    const sender = config.webhookDeliverySender ?? defaultWebhookDeliverySender;
+    const sender = config.webhookDeliverySender ?? ((input) => defaultWebhookDeliverySender(input, config.webhookRequestTimeoutMs));
     const response = await sender(request);
     const ok = response.statusCode >= 200 && response.statusCode < 300;
     const updated = finalizeWebhookDeliveryAttempt(delivery, {
@@ -3050,7 +3331,8 @@ function finalizeWebhookDeliveryAttempt(
 ): WebhookDeliveryRecord {
   const exhausted = !result.delivered && result.attempts >= delivery.maxAttempts;
   const nextStatus: WebhookDeliveryStatus = result.delivered ? "delivered" : exhausted ? "dead_letter" : "failed";
-  const nextAttemptAt = result.delivered || exhausted ? undefined : new Date(Date.now() + webhookBackoffMs(result.attempts)).toISOString();
+  const attemptedAtMs = Date.parse(result.attemptedAt);
+  const nextAttemptAt = result.delivered || exhausted ? undefined : new Date(attemptedAtMs + webhookBackoffMs(result.attempts)).toISOString();
   return {
     ...delivery,
     status: nextStatus,
@@ -3058,6 +3340,9 @@ function finalizeWebhookDeliveryAttempt(
     nextAttemptAt,
     lastAttemptAt: result.attemptedAt,
     deliveredAt: result.delivered ? result.attemptedAt : delivery.deliveredAt,
+    leaseOwner: undefined,
+    leaseAcquiredAt: undefined,
+    leaseExpiresAt: undefined,
     lastError: result.error,
     responseStatus: result.statusCode,
     responseBody: result.responseBody,
@@ -3075,11 +3360,12 @@ function webhookBackoffMs(attempts: number): number {
   return Math.min(60_000 * 2 ** Math.max(0, attempts - 1), 60 * 60_000);
 }
 
-async function defaultWebhookDeliverySender(request: WebhookDeliveryRequest): Promise<WebhookDeliverySenderResult> {
+async function defaultWebhookDeliverySender(request: WebhookDeliveryRequest, timeoutMs: number): Promise<WebhookDeliverySenderResult> {
   const response = await fetch(request.url, {
     method: "POST",
     headers: request.headers,
     body: request.rawBody,
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const body = await response.text().catch(() => undefined);
   return {
@@ -3111,6 +3397,10 @@ function isAllowedEmbedOrigin(origin: string | undefined, config: ApiConfig, mer
   return [...merchants.values()].some((merchant) =>
     merchant.domains.some((domain) => domain.verified && normalizedHost(domain.domain) === originHost),
   );
+}
+
+function countVerifiedMerchantDomains(merchants: Map<string, MerchantRecord>): number {
+  return [...merchants.values()].reduce((count, merchant) => count + merchant.domains.filter((domain) => domain.verified).length, 0);
 }
 
 function normalizeOrigin(value: string): string | undefined {

@@ -5,7 +5,7 @@
 Base URL:
 
 ```text
-http://localhost:8787
+http://localhost:3002
 ```
 
 When `REDEEMLOOP_API_KEYS` is configured, merchant-scoped requests require:
@@ -94,6 +94,8 @@ POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
 
+`POST /v1/webhook-deliveries/drain-pending` accepts `merchantId`, `limit`, `workerId`, and `leaseMs`. It claims due `pending` or `failed` deliveries as `processing` before sending, writes `leaseOwner`, `leaseAcquiredAt`, and `leaseExpiresAt`, and allows expired `processing` leases to be reclaimed by a later drain. Delivery status values are `pending`, `processing`, `delivered`, `failed`, and `dead_letter`.
+
 ### Audit Logs
 
 ```http
@@ -109,17 +111,20 @@ GET /health
 GET /v1/config
 GET /v1/diagnostics/evm-rpc
 GET /v1/diagnostics/shopify
+GET /v1/diagnostics/webhooks?merchantId=...
 ```
 
 `GET /v1/diagnostics/evm-rpc` reports ETH/BSC/Polygon/Arbitrum RPC status, source, origin, latest block height, and latency. It does not return the full RPC URL to avoid leaking provider API keys.
 `GET /v1/diagnostics/shopify` reports private-app Admin API readiness without returning the Admin access token.
+`GET /v1/diagnostics/webhooks` reports delivery status counts, stale `processing` leases, recent worker drain heartbeats, and recommended actions. When API keys are enabled, pass `merchantId` and the merchant bearer token.
+`GET /v1/config` returns `persistence.enabled` and `persistence.kind`, where kind is `none`, `json-file`, or `postgres`.
 
 ## 中文
 
 Base URL：
 
 ```text
-http://localhost:8787
+http://localhost:3002
 ```
 
 配置 `REDEEMLOOP_API_KEYS` 后，商户级请求必须携带：
@@ -208,6 +213,8 @@ POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
 
+`POST /v1/webhook-deliveries/drain-pending` 接收 `merchantId`、`limit`、`workerId` 和 `leaseMs`。它会先把到期的 `pending` 或 `failed` delivery 领取为 `processing` 再发送，写入 `leaseOwner`、`leaseAcquiredAt` 和 `leaseExpiresAt`；过期的 `processing` lease 可以被后续 drain 重新领取。Delivery status 包含 `pending`、`processing`、`delivered`、`failed` 和 `dead_letter`。
+
 ### Audit Logs
 
 ```http
@@ -223,7 +230,10 @@ GET /health
 GET /v1/config
 GET /v1/diagnostics/evm-rpc
 GET /v1/diagnostics/shopify
+GET /v1/diagnostics/webhooks?merchantId=...
 ```
 
 `GET /v1/diagnostics/evm-rpc` 会返回 ETH/BSC/Polygon/Arbitrum 的 RPC 状态、来源、origin、最新块高和延迟。接口不会返回完整 RPC URL，以避免泄漏 provider API key。
 `GET /v1/diagnostics/shopify` 会返回 private-app Admin API 准备状态，但不会返回 Admin access token。
+`GET /v1/diagnostics/webhooks` 会返回 delivery 状态统计、stale `processing` lease、最近 worker drain heartbeat 和 recommended actions。启用 API key 时，请传入 `merchantId` 并携带该商户 bearer token。
+`GET /v1/config` 会返回 `persistence.enabled` 和 `persistence.kind`，其中 kind 为 `none`、`json-file` 或 `postgres`。

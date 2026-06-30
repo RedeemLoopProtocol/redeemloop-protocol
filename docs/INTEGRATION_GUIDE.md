@@ -201,15 +201,15 @@ REDEEMLOOP_EMBED_ALLOWED_ORIGINS="https://shop.example,https://checkout.example"
 
 Verified merchant domains are also accepted by the API CORS policy.
 
-### 8. Sandbox Persistence and API Keys
+### 8. Persistence and API Keys
 
-For local or pilot environments, the API can persist sandbox state to a JSON file:
+For beta-oriented deployments, the API can persist its snapshot state to Postgres:
 
 ```bash
-REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json pnpm api:dev
+REDEEMLOOP_DATABASE_URL=postgres://redeemloop:redeemloop@localhost:5432/redeemloop pnpm api:dev
 ```
 
-The file-backed adapter persists merchants, vaults, entitlements, bindings, PaymentIntents, settlement proofs, idempotency keys, webhook endpoints, webhook events, webhook delivery records, and commerce payment records. It is useful for restarts and pilot demos, but production deployments should still move to a managed database.
+Run `services/api/migrations/001_api_snapshots.sql` when managing schema outside the app startup path. `REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json` remains available for local sandbox runs. When both are set, `REDEEMLOOP_DATABASE_URL` takes precedence.
 
 Merchant-scoped API key enforcement can be enabled with:
 
@@ -243,7 +243,7 @@ GET  /v1/audit-logs?merchantId=...
 
 For EVM vault ownership, request a challenge, ask the merchant wallet to sign the returned message, then submit the signature. The API verifies the signature against the vault receiving address.
 
-Run `expire-stale` from a cron or operator task to move old incomplete PaymentIntents to `expired`. Run `drain-pending` from a webhook worker to deliver due webhook records. Audit logs give operators a merchant-scoped trail for vault verification, PaymentIntent state changes, settlement confirmation, and expiration cleanup.
+Run `expire-stale` from a cron or operator task to move old incomplete PaymentIntents to `expired`. Run the webhook worker as a separate process to call `drain-pending`, claim due deliveries with a lease, and deliver them outside the request path. Audit logs give operators a merchant-scoped trail for vault verification, PaymentIntent state changes, settlement confirmation, and expiration cleanup.
 
 ### 10. WooCommerce and Shopify
 
@@ -296,9 +296,23 @@ Useful operations:
 ```http
 GET  /v1/webhook-events?merchantId=merchant_cafe
 GET  /v1/webhook-deliveries?merchantId=merchant_cafe
+GET  /v1/diagnostics/webhooks?merchantId=merchant_cafe
+POST /v1/webhook-deliveries/drain-pending
 POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
+
+Run the worker locally after the API is up:
+
+```bash
+REDEEMLOOP_API_BASE_URL=http://localhost:3002 \
+REDEEMLOOP_WORKER_MERCHANT_ID=merchant_cafe \
+REDEEMLOOP_WORKER_API_KEY=dev-secret \
+pnpm --filter @redeemloop/api worker:dev
+```
+
+`drain-pending` accepts `workerId` and `leaseMs`; due deliveries move through `processing` while leased. Expired leases can be reclaimed by a later worker pass.
+`GET /v1/diagnostics/webhooks` returns delivery counts, stale `processing` leases, recent worker drain heartbeats, and recommended actions for operators.
 
 SDK helpers:
 
@@ -309,11 +323,13 @@ await client.attemptWebhookDelivery("whd_...");
 await client.replayWebhookDelivery("whd_...", { attemptNow: true });
 ```
 
-### 11. Current Limits
+### 12. Current Limits
 
-- Production database migrations are not included yet; v0.2.2 persistence is a file-backed sandbox adapter.
+- v0.10.0 adds snapshot-backed Postgres persistence and a migration boundary. Future beta hardening should split the snapshot into normalized operational tables.
+- v0.10.2 adds webhook operations diagnostics. Production deployments still need external monitoring/alert routing and live commerce-store certification.
+- `pnpm beta:check:production` collects deployment evidence, but it does not replace funded wallet or live commerce-store certification.
 - Client-submitted settlement proof still exists for sandbox/manual flows; EVM ERC-20 can now use trusted receipt recheck.
-- Webhook delivery operations are implemented as a sandbox outbox in the API process. Production deployments should move the same model to a managed database and worker queue.
+- Webhook delivery records are still persisted inside the API snapshot. Later production hardening should split them into normalized operational tables.
 
 ---
 
@@ -518,15 +534,15 @@ REDEEMLOOP_EMBED_ALLOWED_ORIGINS="https://shop.example,https://checkout.example"
 
 已验证的商户域名也会被 API CORS 策略放行。
 
-### 8. Sandbox 持久化和 API Keys
+### 8. 持久化和 API Keys
 
-本地或 pilot 环境可以把 API 状态持久化到 JSON 文件：
+面向 beta 的部署可以把 API snapshot 状态持久化到 Postgres：
 
 ```bash
-REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json pnpm api:dev
+REDEEMLOOP_DATABASE_URL=postgres://redeemloop:redeemloop@localhost:5432/redeemloop pnpm api:dev
 ```
 
-文件持久化 adapter 会保存 merchant、vault、entitlement、binding、PaymentIntent、settlement proof、幂等 key、webhook endpoint、webhook event、webhook delivery record 和 commerce payment record。它适合重启恢复和 pilot demo，但生产部署仍应迁移到托管数据库。
+部署方如果不希望应用启动时自动建表，可以先运行 `services/api/migrations/001_api_snapshots.sql`。`REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json` 仍保留给本地 sandbox。两者同时配置时，优先使用 `REDEEMLOOP_DATABASE_URL`。
 
 商户级 API key 校验可以这样开启：
 
@@ -560,7 +576,7 @@ GET  /v1/audit-logs?merchantId=...
 
 EVM vault ownership 验证流程：先请求 challenge，让商户钱包签名返回的 message，再提交 signature。API 会校验签名地址是否等于 vault 收券地址。
 
-可以用 cron 或 operator task 调用 `expire-stale`，把超时未完成 PaymentIntent 推进到 `expired`。可以用 webhook worker 调用 `drain-pending` 投递到期 webhook 记录。Audit logs 为商户提供 vault 验证、PaymentIntent 状态变化、settlement 确认和过期清理的审计轨迹。
+可以用 cron 或 operator task 调用 `expire-stale`，把超时未完成 PaymentIntent 推进到 `expired`。Webhook worker 应作为独立进程调用 `drain-pending`，用 lease 领取到期 delivery，并在请求路径之外完成投递。Audit logs 为商户提供 vault 验证、PaymentIntent 状态变化、settlement 确认和过期清理的审计轨迹。
 
 ### 10. WooCommerce 和 Shopify
 
@@ -613,9 +629,23 @@ X-RedeemLoop-Signature = hex(hmac_sha256(secret, timestamp + "." + nonce + "." +
 ```http
 GET  /v1/webhook-events?merchantId=merchant_cafe
 GET  /v1/webhook-deliveries?merchantId=merchant_cafe
+GET  /v1/diagnostics/webhooks?merchantId=merchant_cafe
+POST /v1/webhook-deliveries/drain-pending
 POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
+
+API 启动后，可以本地运行 worker：
+
+```bash
+REDEEMLOOP_API_BASE_URL=http://localhost:3002 \
+REDEEMLOOP_WORKER_MERCHANT_ID=merchant_cafe \
+REDEEMLOOP_WORKER_API_KEY=dev-secret \
+pnpm --filter @redeemloop/api worker:dev
+```
+
+`drain-pending` 接收 `workerId` 和 `leaseMs`；到期 delivery 会在租约期间进入 `processing`。过期 lease 可以被后续 worker 重新领取。
+`GET /v1/diagnostics/webhooks` 会返回 delivery 统计、stale `processing` lease、最近 worker drain heartbeat 和给 operator 的 recommended actions。
 
 SDK helper：
 
@@ -626,8 +656,10 @@ await client.attemptWebhookDelivery("whd_...");
 await client.replayWebhookDelivery("whd_...", { attemptNow: true });
 ```
 
-### 11. 当前限制
+### 12. 当前限制
 
-- 尚未提供生产数据库 migrations；v0.2.2 的持久化是文件型 sandbox adapter。
+- v0.10.0 已新增基于 Postgres snapshot 的持久化和 migration 边界。后续 beta 加固应把 snapshot 拆成规范化运维表。
+- v0.10.2 已新增 webhook 运维诊断。生产部署仍需要外部监控/告警路由和真实电商店铺认证。
+- `pnpm beta:check:production` 会采集部署证据，但不能替代 funded wallet 或 live commerce-store certification。
 - 客户端提交 settlement proof 仍保留用于 sandbox/manual flow；EVM ERC-20 现在可以使用可信 receipt recheck。
-- webhook delivery operations 已作为 API 进程内 sandbox outbox 实现。生产部署应迁移到托管数据库和 worker queue。
+- webhook delivery record 仍保存在 API snapshot 内。后续生产加固应把它们拆成规范化运维表。

@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowClockwise, Database, ListChecks, Storefront, WarningCircle } from "@phosphor-icons/react";
-import { RedeemLoopClient, type AuditLog, type MerchantVault, type RedeemLoopPaymentIntent, type RedemptionBinding, type WebhookDelivery, type WebhookEndpoint, type WebhookEvent } from "@redeemloop/sdk";
+import { RedeemLoopClient, type AuditLog, type MerchantVault, type RedeemLoopPaymentIntent, type RedemptionBinding, type WebhookDelivery, type WebhookDiagnosticsResponse, type WebhookEndpoint, type WebhookEvent } from "@redeemloop/sdk";
 import { useMemo, useState } from "react";
 
 type StepStatus = "idle" | "busy" | "done" | "error";
@@ -13,6 +13,7 @@ interface AdminState {
   webhookEndpoints: WebhookEndpoint[];
   webhookEvents: WebhookEvent[];
   webhookDeliveries: WebhookDelivery[];
+  webhookDiagnostics?: WebhookDiagnosticsResponse;
   auditLogs: AuditLog[];
 }
 
@@ -23,11 +24,12 @@ const emptyState: AdminState = {
   webhookEndpoints: [],
   webhookEvents: [],
   webhookDeliveries: [],
+  webhookDiagnostics: undefined,
   auditLogs: [],
 };
 
 export function MerchantAdmin() {
-  const [apiBaseUrl, setApiBaseUrl] = useState("http://localhost:8787");
+  const [apiBaseUrl, setApiBaseUrl] = useState("http://localhost:3002");
   const [apiKey, setApiKey] = useState("");
   const [merchantId, setMerchantId] = useState("merchant_cafe");
   const [state, setState] = useState<AdminState>(emptyState);
@@ -40,16 +42,17 @@ export function MerchantAdmin() {
     setStatus("busy");
     setError("");
     try {
-      const [vaults, bindings, intents, webhookEndpoints, webhookEvents, webhookDeliveries, auditLogs] = await Promise.all([
+      const [vaults, bindings, intents, webhookEndpoints, webhookEvents, webhookDeliveries, webhookDiagnostics, auditLogs] = await Promise.all([
         client.listMerchantVaults({ merchantId }),
         client.listBindings({ merchantId }),
         client.listPaymentIntents({ merchantId }),
         client.listWebhookEndpoints({ merchantId }),
         client.listWebhookEvents({ merchantId }),
         client.listWebhookDeliveries({ merchantId }),
+        client.getWebhookDiagnostics({ merchantId }),
         client.listAuditLogs({ merchantId }),
       ]);
-      setState({ vaults, bindings, intents, webhookEndpoints, webhookEvents, webhookDeliveries, auditLogs });
+      setState({ vaults, bindings, intents, webhookEndpoints, webhookEvents, webhookDeliveries, webhookDiagnostics, auditLogs });
       setStatus("done");
     } catch (cause) {
       setStatus("error");
@@ -183,6 +186,7 @@ export function MerchantAdmin() {
           <AdminPanel title="Webhook Endpoints" rows={state.webhookEndpoints} />
           <AdminPanel title="Webhook Events" rows={state.webhookEvents} />
           <AdminPanel title="Webhook Deliveries" rows={state.webhookDeliveries} />
+          <AdminPanel title="Webhook Diagnostics" rows={state.webhookDiagnostics ? [state.webhookDiagnostics] : []} />
         </section>
 
         <section className="rounded-lg border border-line bg-white/90 p-5 shadow-panel sm:p-6">

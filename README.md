@@ -35,10 +35,11 @@ This release fixes the first public implementation scope:
 - EVM Live Certification console and merchant-facing wallet error taxonomy for ETH/BSC/Polygon/Arbitrum pilot runs.
 - Merchant Embed Alpha with SDK methods, React Pay Button, script-tag widget, and demo store page.
 - File-backed sandbox persistence and merchant-scoped API key enforcement for local/pilot environments.
+- Snapshot-backed Postgres persistence through `REDEEMLOOP_DATABASE_URL` for beta deployment hardening.
 - Trusted EVM ERC-20 settlement recheck from transaction receipts.
 - WooCommerce sandbox payment gateway plugin.
-- Webhook event outbox, signed delivery attempts, retry state, dead-letter status, and replay API.
-- Phase 0 hardening with signed EVM vault ownership challenge, PaymentIntent expiration cleanup, audit logs, and webhook drain worker endpoint.
+- Webhook event outbox, standalone worker process, signed delivery attempts, lease-based processing state, retry state, dead-letter status, and replay API.
+- Phase 0 hardening with signed EVM vault ownership challenge, PaymentIntent expiration cleanup, audit logs, and webhook worker drain endpoint.
 - Merchant Admin pilot console with vaults, bindings, PaymentIntents, webhooks, delivery records, audit logs, and pilot seed data.
 - Shopify private-app mark-as-paid alpha with configuration diagnostics, mocked Admin API tests, and GraphQL user-error handling.
 - Rune production certification track with indexer failover adapter boundary and manual-review recovery for indexer lag.
@@ -113,15 +114,15 @@ Run the API:
 pnpm api:dev
 ```
 
-Optional v0.2.2 sandbox persistence and merchant API keys:
+Optional managed persistence and merchant API keys:
 
 ```bash
-REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json \
+REDEEMLOOP_DATABASE_URL=postgres://redeemloop:redeemloop@localhost:5432/redeemloop \
 REDEEMLOOP_API_KEYS="merchant_cafe:dev-secret" \
 pnpm api:dev
 ```
 
-`REDEEMLOOP_STORAGE_FILE` persists merchants, vaults, entitlements, bindings, PaymentIntents, settlement proofs, idempotency keys, webhook endpoints, webhook events, webhook delivery records, and commerce payment records across API restarts. It is a sandbox persistence adapter, not a production database replacement.
+`REDEEMLOOP_DATABASE_URL` enables snapshot-backed Postgres persistence for merchants, vaults, entitlements, bindings, PaymentIntents, settlement proofs, idempotency keys, webhook endpoints, webhook events, webhook delivery records, public payment sessions, and commerce payment records. Run `services/api/migrations/001_api_snapshots.sql` when managing schema outside the app startup path. `REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json` remains available as a local sandbox fallback.
 `REDEEMLOOP_API_KEYS` accepts comma-separated `merchantId:apiKey` entries or a JSON object string. When configured, merchant-scoped `/v1` API calls must include `Authorization: Bearer <apiKey>`.
 
 Public merchant sandbox:
@@ -132,7 +133,27 @@ pnpm env:check
 docker compose up --build
 ```
 
-Open `http://localhost:3000` for the console and `http://localhost:8787/health` for the API health check.
+Open `http://localhost:3000` for the console and `http://localhost:3002/health` for the API health check.
+
+Docker Compose also starts the webhook worker. For non-Docker local runs, start it after the API:
+
+```bash
+REDEEMLOOP_API_BASE_URL=http://localhost:3002 \
+REDEEMLOOP_WORKER_MERCHANT_ID=merchant_cafe \
+REDEEMLOOP_WORKER_API_KEY=dev-secret \
+pnpm --filter @redeemloop/api worker:dev
+```
+
+Beta readiness evidence:
+
+```bash
+REDEEMLOOP_API_BASE_URL=http://localhost:3002 \
+REDEEMLOOP_MERCHANT_ID=merchant_cafe \
+REDEEMLOOP_API_KEY=dev-secret \
+pnpm beta:check
+```
+
+For production-style gates, use `pnpm beta:check:production`. See [Beta Readiness Checks](docs/BETA_READINESS.md).
 
 Trusted EVM settlement recheck can be enabled with:
 
@@ -150,7 +171,7 @@ Run the local Phase 0 console:
 pnpm pos:dev
 ```
 
-Open `http://localhost:3000`, keep the API at `http://localhost:8787`, then run:
+Open `http://localhost:3000`, keep the API at `http://localhost:3002`, then run:
 
 1. Create Asset Binding.
 2. Create PaymentIntent.
@@ -247,6 +268,8 @@ GET  /v1/webhook-events?merchantId=...
 GET  /v1/webhook-events/:eventId
 GET  /v1/webhook-deliveries?merchantId=...
 GET  /v1/webhook-deliveries/:deliveryId
+GET  /v1/diagnostics/webhooks?merchantId=...
+POST /v1/webhook-deliveries/drain-pending
 POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
@@ -286,11 +309,13 @@ Merchants can inspect and operate delivery records through:
 ```text
 GET  /v1/webhook-events?merchantId=...
 GET  /v1/webhook-deliveries?merchantId=...
+GET  /v1/diagnostics/webhooks?merchantId=...
+POST /v1/webhook-deliveries/drain-pending
 POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
 
-This is a sandbox operations layer backed by the current API persistence adapter. Production deployments should move the same model to a managed database and worker queue.
+This operations layer can now be backed by Postgres snapshot persistence, drained by a standalone worker with delivery leases, and inspected through webhook diagnostics. Production deployments still need external monitoring/alert routing and live wallet/commerce certification before beta claims.
 
 Legacy v0.1 relayer routes remain in code only as compatibility test coverage. New integrations should use the v0.2 Asset Binding and PaymentIntent API.
 
@@ -374,8 +399,8 @@ PaymentIntent
 - 文件持久化 sandbox 和商户级 API key 校验，适用于本地和 pilot 环境。
 - 基于 transaction receipt 的可信 EVM ERC-20 settlement recheck。
 - WooCommerce sandbox payment gateway plugin。
-- Webhook event outbox、签名投递、重试状态、dead-letter 状态和 replay API。
-- Phase 0 hardening：EVM vault ownership 签名 challenge、PaymentIntent 过期清理、audit logs 和 webhook drain worker endpoint。
+- Webhook event outbox、独立 worker 进程、签名投递、基于 lease 的 processing 状态、重试状态、dead-letter 状态和 replay API。
+- Phase 0 hardening：EVM vault ownership 签名 challenge、PaymentIntent 过期清理、audit logs 和 webhook worker drain endpoint。
 - Merchant Admin pilot console：支持 vaults、bindings、PaymentIntents、webhooks、delivery records、audit logs 和 pilot seed data。
 - Shopify private-app mark-as-paid alpha：包含配置诊断、mocked Admin API tests 和 GraphQL user-error 处理。
 - Rune production certification track：包含 indexer failover adapter boundary 和 indexer lag manual-review recovery。
@@ -453,7 +478,7 @@ pnpm api:dev
 pnpm pos:dev
 ```
 
-打开 `http://localhost:3000`，API 保持在 `http://localhost:8787`，然后按顺序运行：
+打开 `http://localhost:3000`，API 保持在 `http://localhost:3002`，然后按顺序运行：
 
 1. Create Asset Binding。
 2. Create PaymentIntent。
@@ -498,6 +523,8 @@ GET  /v1/webhook-events?merchantId=...
 GET  /v1/webhook-events/:eventId
 GET  /v1/webhook-deliveries?merchantId=...
 GET  /v1/webhook-deliveries/:deliveryId
+GET  /v1/diagnostics/webhooks?merchantId=...
+POST /v1/webhook-deliveries/drain-pending
 POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
@@ -519,11 +546,13 @@ X-RedeemLoop-Signature = hex(hmac_sha256(secret, timestamp + "." + nonce + "." +
 ```text
 GET  /v1/webhook-events?merchantId=...
 GET  /v1/webhook-deliveries?merchantId=...
+GET  /v1/diagnostics/webhooks?merchantId=...
+POST /v1/webhook-deliveries/drain-pending
 POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
 
-这仍是基于当前 API persistence adapter 的 sandbox 运维层。生产部署应迁移到托管数据库和 worker queue。
+该运维层现在可以使用 Postgres snapshot 持久化，由带 delivery lease 的独立 worker drain，并通过 webhook diagnostics 检查。生产部署在 beta 声明前仍需要外部监控/告警路由，以及真实钱包/电商认证。
 
 旧 v0.1 relayer 路由仅作为兼容测试保留。新集成应使用 v0.2 Asset Binding 和 PaymentIntent API。
 

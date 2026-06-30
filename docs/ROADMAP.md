@@ -14,8 +14,26 @@ This roadmap is the public product direction after the v0.2 Phase 0 realignment.
 - Merchant admin pilot console for vaults, bindings, PaymentIntents, webhooks, deliveries, and audit logs.
 - WooCommerce pilot improvements with admin diagnostics and SKU-to-binding mapping.
 - Shopify private-app mark-as-paid alpha with Admin API diagnostics and mocked GraphQL tests.
+- Snapshot-backed Postgres persistence with migration boundary for beta deployments.
+- Standalone webhook worker process with delivery lease semantics and request timeouts.
+- Webhook operations diagnostics for failed, dead-letter, stale `processing`, and worker drain recency.
+- Default `/v1` API rate limiting plus CORS and rate-limit readiness diagnostics.
+- Beta readiness checker for API health, persistence kind, webhook worker heartbeat, EVM RPC diagnostics, Shopify diagnostics, and optional Docker Compose config.
+- Docker Compose smoke command for API, Postgres persistence, worker heartbeat, and console readiness.
+- Manual GitHub Actions workflow for Docker Compose smoke evidence when local Docker is unavailable.
+- Beta evidence manifest validator for external compose, production readiness, funded EVM, WooCommerce, optional Shopify, and release-note artifacts.
+- Beta evidence scaffold for local release evidence folders with intentionally failing placeholders.
+- Funded EVM wallet certification evidence generator backed by read-only RPC receipt checks.
+- Commerce mark-as-paid certification evidence generator with dry-run rejection in beta validation.
+- Final beta release gate for evidence, bilingual release notes, README links, CI/Pages workflow presence, and workspace version consistency.
+- Workspace beta version preparation command for release-tag alignment.
+- Public-safe bilingual beta release evidence summary generator for GitHub Release notes.
+- Public release privacy gate for secret-like text and local filesystem path leakage.
+- Active pnpm workspace override checks for beta dependency hygiene.
+- Frozen lockfile release gate for package/lockfile publication consistency.
+- Compose-smoke evidence workflow release gate to preserve the Docker evidence path before beta publication.
 
-Current status: v0.9.3 provides EVM pilot-certification tooling, Phase 0 hardening, a local merchant operations console, WooCommerce pilot mapping, Shopify private-app mark-as-paid alpha support, POS QR/short-link hosted payment pages, token-scoped public checkout sessions, and a static official website with pure Chinese/English pages, transparent SVG RedeemLoop VI assets, and merchant scenario models. Funded wallet runs, managed database storage, and live commerce-store certification are still required before production-certified claims.
+Current status: v0.10.17 adds a beta release gate check for the compose-smoke evidence workflow on top of the v0.10.16 GitHub Actions-based Docker Compose smoke evidence generation and JSON-safe compose-smoke output, v0.10.15 API rate limits, stricter CORS/rate-limit diagnostics, and safer production environment checks, v0.10.14 frozen lockfile release gate, v0.10.13 pnpm workspace override hygiene, v0.10.12 public release privacy checks, v0.10.11 public-safe bilingual beta release evidence summary generator, v0.10.10 workspace beta version preparation command, v0.10.9 final beta release gate, v0.10.8 commerce mark-as-paid certification evidence generator, v0.10.7 funded EVM wallet certification evidence generator, v0.10.6 safe beta evidence scaffold, v0.10.5 beta evidence manifest validator, v0.10.4 Docker Compose smoke command, v0.10.3 beta readiness evidence command, v0.10.2 webhook operations diagnostics, v0.10.1 standalone webhook worker boundary, and v0.10.0 Postgres snapshot persistence. Funded-wallet and test-store artifacts still need to be produced before production-certified beta claims.
 
 ## Phase 1
 

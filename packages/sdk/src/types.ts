@@ -374,6 +374,60 @@ export interface ShopifyDiagnosticsResponse {
   diagnostics: ShopifyAdapterDiagnostics;
 }
 
+export interface WebhookDiagnosticsInput {
+  merchantId?: string;
+  staleProcessingMs?: number;
+  noDrainMs?: number;
+}
+
+export interface WebhookDiagnosticsResponse {
+  checkedAt: string;
+  merchantId?: string;
+  thresholds: {
+    staleProcessingMs: number;
+    noDrainMs: number;
+  };
+  deliveries: {
+    total: number;
+    pending: number;
+    processing: number;
+    delivered: number;
+    failed: number;
+    deadLetter: number;
+    staleProcessing: number;
+  };
+  worker: {
+    latestDrainAt?: string;
+    noRecentDrain: boolean;
+    recentDrains: Array<{
+      workerId: string;
+      merchantId?: string;
+      checkedAt: string;
+      attempted: number;
+      delivered: number;
+      failed: number;
+      deadLetter: number;
+      updatedAt: string;
+    }>;
+  };
+  staleProcessing: Array<{
+    deliveryId: string;
+    eventId: string;
+    endpointId: string;
+    merchantId: string;
+    status: WebhookDeliveryStatus;
+    attempts: number;
+    maxAttempts: number;
+    nextAttemptAt?: string;
+    lastAttemptAt?: string;
+    leaseOwner?: string;
+    leaseAcquiredAt?: string;
+    leaseExpiresAt?: string;
+    lastError?: string;
+  }>;
+  recommendedActions: string[];
+}
+
 export interface WebhookEndpoint {
   id: string;
   merchantId: string;
@@ -403,7 +457,7 @@ export interface TestWebhookEndpointResponse {
   };
 }
 
-export type WebhookDeliveryStatus = "pending" | "delivered" | "failed" | "dead_letter";
+export type WebhookDeliveryStatus = "pending" | "processing" | "delivered" | "failed" | "dead_letter";
 
 export interface WebhookEvent {
   eventId: string;
@@ -428,6 +482,9 @@ export interface WebhookDelivery {
   nextAttemptAt?: string;
   lastAttemptAt?: string;
   deliveredAt?: string;
+  leaseOwner?: string;
+  leaseAcquiredAt?: string;
+  leaseExpiresAt?: string;
   lastError?: string;
   responseStatus?: number;
   responseBody?: unknown;
@@ -444,6 +501,8 @@ export interface WebhookDelivery {
 export interface DrainWebhookDeliveriesInput {
   merchantId?: string;
   limit?: number;
+  workerId?: string;
+  leaseMs?: number;
 }
 
 export interface DrainWebhookDeliveriesResponse {

@@ -51,6 +51,7 @@ A chain/wallet pair is pilot-certified only when:
 - `POST /v1/settlement/evm/recheck/:intentId` verifies the receipt through the configured RPC.
 - PaymentIntent reaches `paid`.
 - Commerce/webhook mark-as-paid path is observable or explicitly deferred for that certification run.
+- `pnpm --silent beta:evidence:evm -- ... --out evidence/evm-wallet-certification.json` produces the release evidence artifact from the final transaction receipt.
 
 ### Wallet Error Codes
 
@@ -137,6 +138,7 @@ EVM_MIN_CONFIRMATIONS=2
 - RedeemLoop 记录 broadcast txid。
 - `POST /v1/settlement/evm/recheck/:intentId` 能通过配置的 RPC 验证 receipt。
 - PaymentIntent 到达 `paid`。
+- `pnpm --silent beta:evidence:evm -- ... --out evidence/evm-wallet-certification.json` 能从最终 transaction receipt 生成 release evidence artifact。
 - commerce/webhook mark-as-paid 路径可观察，或在本次认证中明确标记为 deferred。
 
 ### 钱包错误码

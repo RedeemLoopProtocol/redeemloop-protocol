@@ -17,7 +17,7 @@ const defaultMerchant = {
 };
 
 export function EvmLiveCertification() {
-  const [apiBaseUrl, setApiBaseUrl] = useState("http://localhost:8787");
+  const [apiBaseUrl, setApiBaseUrl] = useState("http://localhost:3002");
   const [chainId, setChainId] = useState(1);
   const [tokenContract, setTokenContract] = useState("0x0000000000000000000000000000000000000def");
   const [merchantVault, setMerchantVault] = useState("0x0000000000000000000000000000000000000abc");

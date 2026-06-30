@@ -98,6 +98,7 @@ describe("RedeemLoopClient", () => {
     });
     await client.getEvmRpcDiagnostics();
     await client.getShopifyDiagnostics();
+    await client.getWebhookDiagnostics({ merchantId: "merchant_cafe" });
     await client.createWebhookEndpoint({
       merchantId: "merchant_cafe",
       url: "https://merchant.example/redeemloop",
@@ -131,6 +132,7 @@ describe("RedeemLoopClient", () => {
       "https://api.example.test/v1/settlement/rune/recheck/pi_test",
       "https://api.example.test/v1/diagnostics/evm-rpc",
       "https://api.example.test/v1/diagnostics/shopify",
+      "https://api.example.test/v1/diagnostics/webhooks?merchantId=merchant_cafe",
       "https://api.example.test/v1/webhook-endpoints",
       "https://api.example.test/v1/webhook-deliveries/drain-pending",
       "https://api.example.test/v1/audit-logs?merchantId=merchant_cafe",

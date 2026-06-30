@@ -6,7 +6,7 @@ describe("readWidgetOptions", () => {
   it("reads script-tag widget options from data attributes", () => {
     const element = {
       dataset: {
-        apiBaseUrl: "http://localhost:8787",
+        apiBaseUrl: "http://localhost:3002",
         bindingId: "bind_test",
         orderId: "order_1",
         sku: "sku_1",
@@ -22,7 +22,7 @@ describe("readWidgetOptions", () => {
     } as unknown as HTMLElement;
 
     expect(readWidgetOptions(element)).toEqual({
-      apiBaseUrl: "http://localhost:8787",
+      apiBaseUrl: "http://localhost:3002",
       apiKey: undefined,
       intentId: undefined,
       bindingId: "bind_test",
@@ -47,13 +47,13 @@ describe("readWidgetOptions", () => {
   it("accepts an existing PaymentIntent for checkout-return pages", () => {
     const element = {
       dataset: {
-        apiBaseUrl: "http://localhost:8787",
+        apiBaseUrl: "http://localhost:3002",
         intentId: "pi_existing",
       },
     } as unknown as HTMLElement;
 
     expect(readWidgetOptions(element)).toMatchObject({
-      apiBaseUrl: "http://localhost:8787",
+      apiBaseUrl: "http://localhost:3002",
       intentId: "pi_existing",
       autoSendEvmTransaction: false,
       autoRecheckEvmSettlement: false,

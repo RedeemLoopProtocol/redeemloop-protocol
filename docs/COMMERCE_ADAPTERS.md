@@ -78,3 +78,7 @@ POST /webhook/payment-confirmed
 - 错误收券地址。
 - 超时。
 - 手动复核。
+
+## 9. Beta Evidence
+
+Settlement 确认后，使用 `pnpm --silent beta:evidence:commerce -- ... --out evidence/woocommerce-certification.json` 生成 mark-as-paid release evidence。Beta validator 要求 `dryRun: false` 和 paid completion status；dry-run commerce artifact 只能用于本地诊断，不能作为 production beta evidence。
