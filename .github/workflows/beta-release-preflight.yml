@@ -71,15 +71,29 @@ jobs:
           download_artifact() {
             run_id="$1"
             artifact_name="$2"
+            shift 2
             if [ -n "$run_id" ]; then
-              gh run download "$run_id" --name "$artifact_name" --dir evidence
+              temp_dir="$(mktemp -d)"
+              if gh run download "$run_id" --name "$artifact_name" --dir "$temp_dir"; then
+                for target in "$@"; do
+                  source_file="$(find "$temp_dir" -type f -name "$(basename "$target")" | head -n 1)"
+                  if [ -n "$source_file" ]; then
+                    cp "$source_file" "$target"
+                  else
+                    echo "::warning::Artifact $artifact_name from run $run_id did not contain $(basename "$target")."
+                  fi
+                done
+              else
+                echo "::warning::Could not download artifact $artifact_name from run $run_id."
+              fi
+              rm -rf "$temp_dir"
             fi
           }
 
-          download_artifact "$COMPOSE_SMOKE_RUN_ID" "redeemloop-compose-smoke-evidence"
-          download_artifact "$PRODUCTION_READINESS_RUN_ID" "redeemloop-production-readiness-evidence"
-          download_artifact "$EVM_CERTIFICATION_RUN_ID" "redeemloop-evm-wallet-certification-evidence"
-          download_artifact "$WOOCOMMERCE_CERTIFICATION_RUN_ID" "redeemloop-woocommerce-certification-evidence"
+          download_artifact "$COMPOSE_SMOKE_RUN_ID" "redeemloop-compose-smoke-evidence" evidence/compose-smoke.json
+          download_artifact "$PRODUCTION_READINESS_RUN_ID" "redeemloop-production-readiness-evidence" evidence/beta-readiness-production.json
+          download_artifact "$EVM_CERTIFICATION_RUN_ID" "redeemloop-evm-wallet-certification-evidence" evidence/evm-wallet-certification.json
+          download_artifact "$WOOCOMMERCE_CERTIFICATION_RUN_ID" "redeemloop-woocommerce-certification-evidence" evidence/woocommerce-certification.json
 
       - name: Run beta release preflight
         run: |

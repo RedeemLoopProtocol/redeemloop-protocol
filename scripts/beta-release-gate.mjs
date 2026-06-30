@@ -233,6 +233,7 @@ async function checkGithubWorkflows(output) {
     frozenInstall: releasePreflight?.includes("pnpm install --frozen-lockfile") ?? false,
     evidenceInit: releasePreflight?.includes("pnpm --silent beta:evidence:init") ?? false,
     artifactDownload: releasePreflight?.includes("gh run download") ?? false,
+    tempArtifactDownload: (releasePreflight?.includes("mktemp -d") ?? false) && (releasePreflight?.includes('cp "$source_file" "$target"') ?? false),
     preflightCommand: releasePreflight?.includes("pnpm --silent beta:release:preflight") ?? false,
     evmSecretEnv: releasePreflight?.includes("REDEEMLOOP_EVM_RPC_URLS=REDEEMLOOP_EVM_RPC_URLS") ?? false,
     commerceSecretEnv: releasePreflight?.includes("REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY=REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY") ?? false,
