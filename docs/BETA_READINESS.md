@@ -94,6 +94,16 @@ pnpm beta:evidence:init -- --missing-only
 
 Use `--force` only when you intentionally want to replace every local evidence file with fresh placeholders.
 
+After GitHub evidence workflows complete, download selected artifacts by workflow run ID. The command replaces scaffold placeholders but refuses to overwrite existing non-placeholder evidence unless `--force` is passed:
+
+```bash
+pnpm beta:evidence:download -- \
+  --compose-run-id <compose_smoke_run_id> \
+  --production-run-id <production_readiness_run_id> \
+  --evm-run-id <evm_workflow_run_id> \
+  --woocommerce-run-id <woocommerce_workflow_run_id>
+```
+
 Required evidence for a production-certified beta claim:
 
 - Docker Compose smoke JSON from `pnpm --silent beta:smoke:compose -- --json`.
@@ -289,6 +299,16 @@ pnpm beta:evidence:init -- --missing-only
 ```
 
 只有在你明确要用全新的占位文件替换所有本地 evidence 时，才使用 `--force`。
+
+GitHub evidence workflow 完成后，可以按 workflow run ID 下载指定 artifact。该命令会替换 scaffold placeholder；如果目标文件已经是非 placeholder evidence，默认拒绝覆盖，除非显式传入 `--force`：
+
+```bash
+pnpm beta:evidence:download -- \
+  --compose-run-id <compose_smoke_run_id> \
+  --production-run-id <production_readiness_run_id> \
+  --evm-run-id <evm_workflow_run_id> \
+  --woocommerce-run-id <woocommerce_workflow_run_id>
+```
 
 Production-certified beta 声明所需证据：
 

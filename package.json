@@ -22,6 +22,7 @@
     "beta:evidence:init": "node scripts/init-beta-evidence.mjs",
     "beta:evidence:evm": "node scripts/create-evm-certification-evidence.mjs",
     "beta:evidence:commerce": "node scripts/create-commerce-certification-evidence.mjs",
+    "beta:evidence:download": "node scripts/download-beta-evidence-artifacts.mjs",
     "beta:evidence:check": "node scripts/check-beta-evidence.mjs",
     "beta:evidence:summary": "node scripts/create-beta-release-summary.mjs",
     "beta:release:preflight": "node scripts/beta-release-preflight.mjs",

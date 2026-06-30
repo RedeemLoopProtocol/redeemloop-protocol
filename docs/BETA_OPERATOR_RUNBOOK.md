@@ -79,8 +79,13 @@ In GitHub:
 3. Click `Run workflow`.
 4. Enter the recorded funded-transfer fields.
 5. Run the workflow.
-6. Download artifact `redeemloop-evm-wallet-certification-evidence`.
-7. Place the downloaded JSON at `evidence/evm-wallet-certification.json`.
+6. Note the completed workflow run ID.
+7. Download the artifact into the local evidence folder:
+
+```bash
+pnpm beta:evidence:download -- \
+  --evm-run-id <evm_workflow_run_id>
+```
 
 Local fallback:
 
@@ -116,8 +121,13 @@ In GitHub:
    - `receiver`
    - `tx_hash`
 5. Run the workflow.
-6. Download artifact `redeemloop-woocommerce-certification-evidence`.
-7. Place the downloaded JSON at `evidence/woocommerce-certification.json`.
+6. Note the completed workflow run ID.
+7. Download the artifact into the local evidence folder:
+
+```bash
+pnpm beta:evidence:download -- \
+  --woocommerce-run-id <woocommerce_workflow_run_id>
+```
 
 Do not use dry-run output for beta publication. The validator rejects dry-run evidence.
 
@@ -127,6 +137,16 @@ Keep private evidence in the ignored `evidence/` directory. If the manifest is m
 
 ```bash
 pnpm beta:evidence:init -- --missing-only
+```
+
+Download any completed GitHub evidence workflow artifacts into the same folder. The command replaces scaffold placeholders but refuses to overwrite existing non-placeholder evidence unless `--force` is passed:
+
+```bash
+pnpm beta:evidence:download -- \
+  --compose-run-id <compose_smoke_run_id> \
+  --production-run-id <production_readiness_run_id> \
+  --evm-run-id <evm_workflow_run_id> \
+  --woocommerce-run-id <woocommerce_workflow_run_id>
 ```
 
 Then validate:
@@ -263,8 +283,13 @@ pnpm beta:release:preflight -- \
 3. 点击 `Run workflow`。
 4. 输入已记录的 funded-transfer 字段。
 5. 运行 workflow。
-6. 下载 artifact：`redeemloop-evm-wallet-certification-evidence`。
-7. 把下载的 JSON 放到 `evidence/evm-wallet-certification.json`。
+6. 记录已完成 workflow run ID。
+7. 把 artifact 下载到本地 evidence 目录：
+
+```bash
+pnpm beta:evidence:download -- \
+  --evm-run-id <evm_workflow_run_id>
+```
 
 本地备用命令：
 
@@ -300,8 +325,13 @@ pnpm --silent beta:evidence:evm -- \
    - `receiver`
    - `tx_hash`
 5. 运行 workflow。
-6. 下载 artifact：`redeemloop-woocommerce-certification-evidence`。
-7. 把下载的 JSON 放到 `evidence/woocommerce-certification.json`。
+6. 记录已完成 workflow run ID。
+7. 把 artifact 下载到本地 evidence 目录：
+
+```bash
+pnpm beta:evidence:download -- \
+  --woocommerce-run-id <woocommerce_workflow_run_id>
+```
 
 不要把 dry-run 输出用于 beta 发布。Validator 会拒绝 dry-run evidence。
 
@@ -311,6 +341,16 @@ pnpm --silent beta:evidence:evm -- \
 
 ```bash
 pnpm beta:evidence:init -- --missing-only
+```
+
+把已完成的 GitHub evidence workflow artifact 下载到同一个目录。该命令会替换 scaffold placeholder；如果目标文件已经是非 placeholder evidence，默认拒绝覆盖，除非显式传入 `--force`：
+
+```bash
+pnpm beta:evidence:download -- \
+  --compose-run-id <compose_smoke_run_id> \
+  --production-run-id <production_readiness_run_id> \
+  --evm-run-id <evm_workflow_run_id> \
+  --woocommerce-run-id <woocommerce_workflow_run_id>
 ```
 
 然后校验：

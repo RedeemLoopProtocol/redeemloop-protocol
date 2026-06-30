@@ -88,6 +88,7 @@ Shopify live support is optional for the first beta. Bitcoin Rune, Fractal, insc
 5. Validate the private beta evidence folder.
    - Keep `compose-smoke.json` and `beta-readiness-production.json` from the passing GitHub Actions runs.
    - Optionally run **Beta Release Preflight Evidence** with the completed evidence workflow run IDs.
+   - Use `pnpm beta:evidence:download -- --compose-run-id <run> --production-run-id <run> --evm-run-id <run> --woocommerce-run-id <run>` to copy completed workflow artifacts into `evidence/`.
    - Run `pnpm beta:release:preflight -- --manifest evidence/beta-evidence.manifest.json --github --repo RedeemLoopProtocol/redeemloop-protocol`.
    - Run `pnpm beta:evidence:check -- --manifest evidence/beta-evidence.manifest.json`.
 
@@ -231,6 +232,7 @@ Release gate 现在仍然失败，这是有意设计；只有真实 artifact 就
 5. 校验私有 beta evidence 目录。
    - 保留已通过 GitHub Actions 生成的 `compose-smoke.json` 和 `beta-readiness-production.json`。
    - 可以用已完成的 evidence workflow run ID 运行 **Beta Release Preflight Evidence**。
+   - 使用 `pnpm beta:evidence:download -- --compose-run-id <run> --production-run-id <run> --evm-run-id <run> --woocommerce-run-id <run>` 把已完成 workflow artifacts 写入 `evidence/`。
    - 运行 `pnpm beta:release:preflight -- --manifest evidence/beta-evidence.manifest.json --github --repo RedeemLoopProtocol/redeemloop-protocol`。
    - 运行 `pnpm beta:evidence:check -- --manifest evidence/beta-evidence.manifest.json`。
 
