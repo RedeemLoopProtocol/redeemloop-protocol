@@ -345,6 +345,7 @@ manual_review
 - [协议规格](docs/PROTOCOL_SPEC.md)
 - [集成指南](docs/INTEGRATION_GUIDE.md)
 - [Public Merchant Sandbox](docs/PUBLIC_SANDBOX.md)
+- [Beta 发布施工计划](docs/BETA_RELEASE_EXECUTION_PLAN.md)
 - [EVM Multi-Chain Wallet Beta](docs/EVM_MULTI_CHAIN_WALLET.md)
 - [EVM Live Certification Runbook](docs/EVM_LIVE_CERTIFICATION.md)
 - [Merchant Admin and WooCommerce Pilot](docs/MERCHANT_ADMIN_WOOCOMMERCE_PILOT.md)
