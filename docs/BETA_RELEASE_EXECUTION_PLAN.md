@@ -6,7 +6,7 @@ This document tracks the remaining distance from the current alpha/pilot impleme
 
 ### Current Distance
 
-As of v0.10.23, the codebase has the release tooling needed for a public beta, but the beta cannot be claimed as production-certified yet.
+As of v0.10.25, the codebase has the release tooling needed for a public beta, but the beta cannot be claimed as production-certified yet.
 
 The remaining distance is narrow and evidence-bound:
 
@@ -17,7 +17,7 @@ The remaining distance is narrow and evidence-bound:
 
 The release gate is intentionally still failing until those artifacts exist.
 
-The latest local preflight on 2026-06-30 returned `5 pass`, `1 warn`, and `5 fail`. The passing checks cover manifest loading, compose smoke evidence, production-readiness evidence, repository selection, and the `REDEEMLOOP_EVM_RPC_URLS` secret. The failures are the expected blockers: missing funded EVM evidence, missing WooCommerce evidence, missing beta release notes, missing commerce certification secret, and the aggregate evidence validator failure caused by those missing inputs.
+The latest local preflight on July 1, 2026, after restoring the missing local manifest with `pnpm beta:evidence:init -- --missing-only`, returned `5 pass`, `1 warn`, and `6 fail` when both GitHub secret and secret-env checks were enabled. The passing checks cover manifest loading, compose smoke evidence, production-readiness evidence, repository selection, and the `REDEEMLOOP_EVM_RPC_URLS` secret. The failures are the expected blockers: missing funded EVM evidence, missing WooCommerce evidence, missing beta release notes, missing commerce certification secret in GitHub, missing local injected commerce secret, and the aggregate evidence validator failure caused by those missing inputs.
 
 ### Already Ready
 
@@ -147,7 +147,7 @@ The first beta must not claim:
 
 ### 当前距离
 
-截至 v0.10.23，代码库已经具备公开 beta 所需的发布工具链，但还不能声明为 production-certified beta。
+截至 v0.10.25，代码库已经具备公开 beta 所需的发布工具链，但还不能声明为 production-certified beta。
 
 剩余距离很窄，主要是证据缺口：
 
@@ -158,7 +158,7 @@ The first beta must not claim:
 
 Release gate 现在仍然失败，这是有意设计；只有真实 artifact 就位后才应通过。
 
-2026-06-30 最新本地 preflight 结果为：`5 pass`、`1 warn`、`5 fail`。已通过项包括 manifest 加载、compose smoke evidence、production-readiness evidence、仓库选择以及 `REDEEMLOOP_EVM_RPC_URLS` secret。失败项是预期阻断：缺 funded EVM evidence、缺 WooCommerce evidence、缺 beta release notes、缺 commerce certification secret，以及由这些缺失输入导致的 evidence validator 汇总失败。
+2026-07-01 在使用 `pnpm beta:evidence:init -- --missing-only` 恢复缺失的本地 manifest 后，最新本地 preflight 结果为：在同时启用 GitHub secret 和 secret-env 检查时，`5 pass`、`1 warn`、`6 fail`。已通过项包括 manifest 加载、compose smoke evidence、production-readiness evidence、仓库选择以及 `REDEEMLOOP_EVM_RPC_URLS` secret。失败项是预期阻断：缺 funded EVM evidence、缺 WooCommerce evidence、缺 beta release notes、GitHub 中缺 commerce certification secret、本地未注入 commerce secret，以及由这些缺失输入导致的 evidence validator 汇总失败。
 
 ### 已经具备
 

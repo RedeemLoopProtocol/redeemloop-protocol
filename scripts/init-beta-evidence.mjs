@@ -14,16 +14,22 @@ const evidenceDir = resolve(args.dir);
 const files = buildFiles(evidenceDir, args.release);
 
 for (const file of files) {
-  await ensureWritable(file.path, args.force);
+  await ensureWritable(file.path, args);
 }
 
 await mkdir(evidenceDir, { recursive: true });
+const results = [];
 for (const file of files) {
+  if (args.missingOnly && await exists(file.path)) {
+    results.push({ ...file, status: "skipped" });
+    continue;
+  }
   await mkdir(dirname(file.path), { recursive: true });
   await writeFile(file.path, `${file.content}\n`, "utf8");
+  results.push({ ...file, status: "created" });
 }
 
-printSummary(files, args);
+printSummary(results, args);
 
 function buildFiles(dir, release) {
   const manifestPath = resolve(dir, "beta-evidence.manifest.json");
@@ -168,14 +174,23 @@ Replace this file with bilingual beta release notes after the compose, productio
   ];
 }
 
-async function ensureWritable(path, force) {
-  if (force) return;
+async function ensureWritable(path, options) {
+  if (options.force || options.missingOnly) return;
   try {
     await access(path);
   } catch {
     return;
   }
   throw new Error(`${manifestPathFor(path)} already exists. Re-run with --force to overwrite.`);
+}
+
+async function exists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function manifestPathFor(path) {
@@ -193,6 +208,7 @@ function parseArgs(argv) {
     dir: "evidence",
     release: "v0.10.x-beta",
     force: false,
+    missingOnly: false,
     help: false,
   };
 
@@ -202,9 +218,12 @@ function parseArgs(argv) {
     else if (arg === "--dir") parsed.dir = requireNextValue(argv, ++index, arg);
     else if (arg === "--release") parsed.release = requireNextValue(argv, ++index, arg);
     else if (arg === "--force") parsed.force = true;
+    else if (arg === "--missing-only") parsed.missingOnly = true;
     else if (arg === "--help" || arg === "-h") parsed.help = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
+
+  if (parsed.force && parsed.missingOnly) throw new Error("--force and --missing-only cannot be used together");
 
   return parsed;
 }
@@ -213,18 +232,25 @@ function printHelp() {
   console.log(`RedeemLoop beta evidence scaffold
 
 Usage:
-  node scripts/init-beta-evidence.mjs [--dir evidence] [--release v0.10.x-beta] [--force]
+  node scripts/init-beta-evidence.mjs [--dir evidence] [--release v0.10.x-beta] [--force] [--missing-only]
 
 Creates a local evidence manifest and intentionally failing placeholder artifacts.
 Replace the placeholders with real external certification outputs before publishing a beta release.
+Use --missing-only to restore a missing manifest or placeholder files without overwriting existing evidence artifacts.
 `);
 }
 
 function printSummary(files, options) {
-  console.log(`Created RedeemLoop beta evidence scaffold for ${options.release}:`);
+  const created = files.filter((file) => file.status === "created");
+  const skipped = files.filter((file) => file.status === "skipped");
+  const verb = options.missingOnly ? "Updated" : "Created";
+
+  console.log(`${verb} RedeemLoop beta evidence scaffold for ${options.release}:`);
   for (const file of files) {
-    console.log(`- ${manifestPathFor(file.path)}`);
+    const prefix = file.status === "skipped" ? "skipped existing" : "created";
+    console.log(`- ${prefix}: ${manifestPathFor(file.path)}`);
   }
+  console.log(`Summary: ${created.length} created, ${skipped.length} skipped.`);
   console.log("");
   console.log("Next:");
   console.log(`1. Run Docker Compose smoke on a Docker-enabled machine and replace ${manifestPathFor(resolve(evidenceDir, "compose-smoke.json"))}.`);

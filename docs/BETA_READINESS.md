@@ -84,6 +84,14 @@ pnpm beta:evidence:check -- --manifest evidence/beta-evidence.manifest.json
 
 The generated `evidence/` directory is ignored by Git by default because certification artifacts can contain store URLs, order IDs, wallet addresses, transaction hashes, and deployment metadata. The scaffold intentionally contains failing placeholder artifacts; it cannot pass release validation until real outputs replace them.
 
+If part of the local evidence folder already contains real artifacts but the manifest or another placeholder is missing, restore only missing files without overwriting existing evidence:
+
+```bash
+pnpm beta:evidence:init -- --missing-only
+```
+
+Use `--force` only when you intentionally want to replace every local evidence file with fresh placeholders.
+
 Required evidence for a production-certified beta claim:
 
 - Docker Compose smoke JSON from `pnpm --silent beta:smoke:compose -- --json`.
@@ -269,6 +277,14 @@ pnpm beta:evidence:check -- --manifest evidence/beta-evidence.manifest.json
 ```
 
 默认生成的 `evidence/` 目录会被 Git 忽略，因为 certification artifact 可能包含店铺 URL、订单 ID、钱包地址、交易哈希和部署元数据。脚手架会故意生成失败状态的占位 artifact；只有替换为真实输出后，release validation 才可能通过。
+
+如果本地 evidence 目录中已经有真实 artifact，但 manifest 或某个占位文件丢失，可以只恢复缺失文件，不覆盖已有 evidence：
+
+```bash
+pnpm beta:evidence:init -- --missing-only
+```
+
+只有在你明确要用全新的占位文件替换所有本地 evidence 时，才使用 `--force`。
 
 Production-certified beta 声明所需证据：
 
