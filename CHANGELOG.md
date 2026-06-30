@@ -47,6 +47,7 @@
 - Added a bilingual beta operator runbook for GitHub secret setup, funded EVM evidence, WooCommerce evidence, release-note generation, final gate execution, and GitHub Release publication.
 - Tightened the beta evidence and release gates so public Markdown release artifacts fail when they contain full EVM addresses or transaction hashes.
 - Added `pnpm beta:evidence:download` to safely download selected GitHub Actions evidence artifacts into the local ignored evidence folder by workflow run ID.
+- Updated the beta release preflight GitHub Actions workflow to reuse `pnpm beta:evidence:download` instead of duplicating artifact download shell logic.
 - Added `pnpm beta:version:prepare` to dry-run or apply a consistent workspace package version before the strict beta release gate.
 - Added bilingual beta readiness guide at `docs/BETA_READINESS.md`.
 - Reworked the official website from a construction/status page into a merchant-facing product homepage.
@@ -99,6 +100,7 @@
 - 新增双语 beta 发布操作手册，覆盖 GitHub secret 设置、funded EVM evidence、WooCommerce evidence、release-note 生成、最终 gate 和 GitHub Release 发布。
 - 收紧 beta evidence 和 release gates：公开 Markdown release artifact 中出现完整 EVM 地址或交易哈希时会失败。
 - 新增 `pnpm beta:evidence:download`，可按 workflow run ID 把指定 GitHub Actions evidence artifacts 安全下载到本地被 Git 忽略的 evidence 目录。
+- 更新 beta release preflight GitHub Actions workflow，改为复用 `pnpm beta:evidence:download`，不再重复维护 artifact download shell 逻辑。
 - 新增 `pnpm beta:version:prepare`，用于在 strict beta release gate 前 dry-run 或写入一致的 workspace package version。
 - 新增双语 beta readiness 指南：`docs/BETA_READINESS.md`。
 - 将官网从施工说明/工程状态页升级为面向商户的正式产品官网首页。

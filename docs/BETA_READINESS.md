@@ -127,7 +127,7 @@ pnpm beta:release:preflight -- \
 
 Add `--github --repo RedeemLoopProtocol/redeemloop-protocol` to verify that the required GitHub repository secret names exist. The preflight is read-only: it does not send wallet transactions, call commerce adapters, or read secret values. It is an operator checklist, not a substitute for the final release gate.
 
-The same check can be run from GitHub Actions with **Beta Release Preflight Evidence**. The workflow initializes a local evidence manifest on the runner, optionally downloads evidence artifacts from the run IDs you provide, verifies that required repository secrets are injected, runs `pnpm beta:release:preflight`, and uploads `beta-release-preflight.json` as `redeemloop-beta-release-preflight`. A failing preflight run is expected until funded EVM, WooCommerce, and release-note artifacts are present.
+The same check can be run from GitHub Actions with **Beta Release Preflight Evidence**. The workflow initializes a local evidence manifest on the runner, optionally downloads evidence artifacts from the run IDs you provide through `pnpm beta:evidence:download`, verifies that required repository secrets are injected, runs `pnpm beta:release:preflight`, and uploads `beta-release-preflight.json` as `redeemloop-beta-release-preflight`. A failing preflight run is expected until funded EVM, WooCommerce, and release-note artifacts are present.
 
 ### Funded EVM Evidence
 
@@ -333,7 +333,7 @@ pnpm beta:release:preflight -- \
 
 加入 `--github --repo RedeemLoopProtocol/redeemloop-protocol` 后，可以检查必需的 GitHub repository secret 名称是否存在。Preflight 是只读检查：不发送钱包交易，不调用 commerce adapter，也不读取 secret 值。它是操作员 checklist，不能替代最终 release gate。
 
-同样的检查也可以通过 GitHub Actions 的 **Beta Release Preflight Evidence** 运行。该 workflow 会在 runner 上初始化本地 evidence manifest，根据你提供的 run ID 可选下载 evidence artifacts，检查必需 repository secrets 是否已注入，运行 `pnpm beta:release:preflight`，并把 `beta-release-preflight.json` 作为 `redeemloop-beta-release-preflight` 上传。只要 funded EVM、WooCommerce 和 release-note artifacts 还没就位，preflight workflow 失败就是预期状态。
+同样的检查也可以通过 GitHub Actions 的 **Beta Release Preflight Evidence** 运行。该 workflow 会在 runner 上初始化本地 evidence manifest，根据你提供的 run ID 通过 `pnpm beta:evidence:download` 可选下载 evidence artifacts，检查必需 repository secrets 是否已注入，运行 `pnpm beta:release:preflight`，并把 `beta-release-preflight.json` 作为 `redeemloop-beta-release-preflight` 上传。只要 funded EVM、WooCommerce 和 release-note artifacts 还没就位，preflight workflow 失败就是预期状态。
 
 ### Funded EVM Evidence
 
