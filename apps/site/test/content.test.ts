@@ -1,9 +1,26 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import { brandSimulationCopy, brandSimulationIndustries } from "../src/brandSimulationCases";
-import { quickStartCommands, readinessRows, scenarios, siteCopy } from "../src/content";
+import {
+  humanSignals,
+  languageOptions,
+  quickStartCommands,
+  readinessRows,
+  scenarios,
+  simulationVisualCards,
+  siteCopy,
+} from "../src/content";
 
 const containsHan = (value: unknown): boolean => /[\p{Script=Han}]/u.test(JSON.stringify(value));
+const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+const officialSite = readFileSync(new URL("../src/OfficialSite.tsx", import.meta.url), "utf8");
+const pageMetadata = [
+  "../app/(en)/en/page.tsx",
+  "../app/(en)/layout.tsx",
+  "../app/(zh)/page.tsx",
+  "../app/(zh)/layout.tsx",
+].map((file) => readFileSync(new URL(file, import.meta.url), "utf8")).join("\n");
 
 describe("site content", () => {
   it("keeps merchant use cases bilingual and actionable", () => {
@@ -36,6 +53,21 @@ describe("site content", () => {
     expect(heroText).not.toContain("施工");
   });
 
+  it("states the mission inside the Phase 0 beta boundary", () => {
+    expect(siteCopy.en.mission.noClaimBody).toContain("outside the protocol boundary");
+    expect(siteCopy.zh.mission.noClaimBody).toContain("不属于协议核心边界");
+    expect(siteCopy.en.mission.missionBody).toContain("PaymentIntent");
+    expect(siteCopy.zh.mission.wish).toContain("真实 evidence");
+    expect(siteCopy.en.mission.loopSteps).toHaveLength(6);
+    expect(siteCopy.zh.mission.loopSteps).toHaveLength(siteCopy.en.mission.loopSteps.length);
+  });
+
+  it("does not use broad crypto voucher launch language on the official site", () => {
+    expect(JSON.stringify(siteCopy.en)).not.toMatch(/crypto-native|BRC-20|Santa-Claus|token-launch/);
+    expect(JSON.stringify(siteCopy.zh)).not.toMatch(/圣诞老人|每一张加密兑换券|BRC20|有地方可兑/);
+    expect(pageMetadata).not.toMatch(/crypto-native|加密原生兑换券|每一张加密兑换券|有地方可兑/);
+  });
+
   it("links the website to the local developer path", () => {
     expect(quickStartCommands).toContain("pnpm verify");
     expect(quickStartCommands).toContain("pnpm site:dev");
@@ -44,13 +76,40 @@ describe("site content", () => {
   });
 
   it("keeps footer product entries descriptive", () => {
-    expect(siteCopy.en.footer.primaryLinks.map((link) => link.href)).toEqual(["#product", "#use-cases", "#integrations"]);
-    expect(siteCopy.zh.footer.primaryLinks.map((link) => link.label)).toEqual(["产品", "场景", "集成"]);
+    expect(siteCopy.en.footer.primaryLinks.map((link) => link.href)).toEqual(["#mission", "#use-cases", "#integrations"]);
+    expect(siteCopy.zh.footer.primaryLinks.map((link) => link.label)).toEqual(["使命", "场景", "集成"]);
 
     for (const locale of ["en", "zh"] as const) {
       for (const link of siteCopy[locale].footer.primaryLinks) {
         expect(link.body.length).toBeGreaterThan(24);
       }
+    }
+  });
+
+  it("does not use smooth anchor scrolling", () => {
+    expect(css).not.toContain("scroll-behavior: smooth");
+    expect(css).toContain("scroll-behavior: auto");
+  });
+
+  it("keeps the language menu limited to pure Chinese and English releases", () => {
+    expect(languageOptions.map((language) => language.code).sort()).toEqual(["en", "zh"]);
+    expect(languageOptions.map((language) => language.href).sort()).toEqual(["/", "/en"]);
+
+    for (const language of languageOptions) {
+      expect(language.label.en).not.toMatch(/[\p{Script=Han}]/u);
+      expect(language.label.zh.length).toBeGreaterThan(1);
+    }
+  });
+
+  it("adds visual simulation content without presenting it as real evidence", () => {
+    expect(simulationVisualCards).toHaveLength(4);
+    expect(humanSignals).toHaveLength(3);
+    expect(siteCopy.en.simulationStudio.disclaimer).toContain("simulated");
+    expect(siteCopy.zh.simulationStudio.disclaimer).toContain("仿真");
+
+    for (const card of simulationVisualCards) {
+      expect(card.body.en.length).toBeGreaterThan(24);
+      expect(card.proof.zh.length).toBeGreaterThan(6);
     }
   });
 
@@ -79,6 +138,14 @@ describe("site content", () => {
     }
   });
 
+  it("keeps brand previews inside RedeemLoop without live iframe embeds", () => {
+    expect(officialSite).toContain("ScenarioPreviewOverlay");
+    expect(officialSite).toContain("非合作仿真");
+    expect(officialSite).not.toContain("<iframe");
+    expect(css).toContain(".preview-voucher-layer");
+    expect(css).toContain("preview-reference-blur");
+  });
+
   it("keeps English website copy free of Chinese characters", () => {
     const englishScenarioCopy = scenarios.map((scenario) => ({
       status: scenario.status.en,
@@ -98,6 +165,18 @@ describe("site content", () => {
     }));
     const englishSimulationCopy = {
       section: brandSimulationCopy.en,
+      studio: siteCopy.en.simulationStudio,
+      languageMenu: siteCopy.en.languageMenu,
+      languageOptions: languageOptions.map((language) => language.label.en),
+      visualCards: simulationVisualCards.map((card) => ({
+        title: card.title.en,
+        body: card.body.en,
+        proof: card.proof.en,
+      })),
+      signals: humanSignals.map((signal) => ({
+        label: signal.label.en,
+        note: signal.note.en,
+      })),
       industries: brandSimulationIndustries.map((industry) => ({
         label: industry.label.en,
         summary: industry.summary.en,

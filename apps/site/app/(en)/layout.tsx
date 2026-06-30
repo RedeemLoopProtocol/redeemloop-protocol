@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "RedeemLoop Protocol",
   description:
     "Official website for RedeemLoop, the open-source voucher payment infrastructure for merchant-owned digital assets.",
+  icons: {
+    icon: "/vi/redeemloop-logo-mark.svg",
+  },
   openGraph: {
     title: "RedeemLoop Protocol",
     description:
