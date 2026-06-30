@@ -6,15 +6,18 @@ This document tracks the remaining distance from the current alpha/pilot impleme
 
 ### Current Distance
 
-As of v0.10.20, the codebase has the release tooling needed for a public beta, but the beta cannot be claimed as production-certified yet.
+As of v0.10.23, the codebase has the release tooling needed for a public beta, but the beta cannot be claimed as production-certified yet.
 
 The remaining distance is narrow and evidence-bound:
 
 - 2 required live certification artifacts are missing.
 - 1 final public-safe release evidence summary is missing.
+- 1 required GitHub secret for commerce certification is missing.
 - No known core Phase 0 code blocker remains in the release gate.
 
 The release gate is intentionally still failing until those artifacts exist.
+
+The latest local preflight on 2026-06-30 returned `5 pass`, `1 warn`, and `5 fail`. The passing checks cover manifest loading, compose smoke evidence, production-readiness evidence, repository selection, and the `REDEEMLOOP_EVM_RPC_URLS` secret. The failures are the expected blockers: missing funded EVM evidence, missing WooCommerce evidence, missing beta release notes, missing commerce certification secret, and the aggregate evidence validator failure caused by those missing inputs.
 
 ### Already Ready
 
@@ -33,6 +36,7 @@ The release gate is intentionally still failing until those artifacts exist.
 | Funded EVM wallet payment | `evidence/evm-wallet-certification.json` generated from a real ERC-20 voucher transfer receipt | Missing |
 | WooCommerce live mark-as-paid | `evidence/woocommerce-certification.json` generated from a real test-store order confirmation | Missing |
 | Public beta evidence notes | `evidence/RELEASE_BETA.md` generated after all required private artifacts validate | Missing |
+| Commerce certification secret | GitHub repository secret `REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY` | Missing |
 
 Shopify live support is optional for the first beta. Bitcoin Rune, Fractal, inscription, and NFT paths must remain adapter or certification-track claims unless separate live evidence is attached.
 
@@ -51,44 +55,66 @@ Shopify live support is optional for the first beta. Bitcoin Rune, Fractal, insc
 
 ### Execution Plan
 
-1. Run the funded EVM voucher payment.
+0. Freeze the beta claim.
+   - Claim only production-certified EVM ERC-20 voucher payment plus WooCommerce mark-as-paid when the matching evidence passes.
+   - Keep Shopify optional.
+   - Keep Bitcoin Rune, Fractal, inscription, and NFT support as adapter/certification-track claims.
+   - Do not publish a beta tag while any required artifact is still a placeholder or missing.
+
+1. Configure the remaining release secret.
+   - Set `REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY` in the GitHub repository.
+   - Use a merchant-scoped RedeemLoop API key for the certification deployment.
+   - Re-run the beta release preflight and confirm the secret check passes.
+
+2. Run the funded EVM voucher payment.
    - Use the hosted payment page, React pay button, widget, or local certification console.
    - Broadcast one real ERC-20 voucher transfer into the merchant vault.
    - Record chain ID, wallet name/version, PaymentIntent ID, transaction hash, payer, receiver, token contract, and amount.
 
-2. Generate funded EVM evidence.
+3. Generate funded EVM evidence.
    - Run the **Beta EVM Wallet Certification Evidence** workflow.
    - Download `evm-wallet-certification.json`.
    - Place it at `evidence/evm-wallet-certification.json`.
 
-3. Run WooCommerce live mark-as-paid certification.
+4. Run WooCommerce live mark-as-paid certification.
    - Create or select a safe WooCommerce test order.
    - Confirm settlement through RedeemLoop.
    - Run the **Beta WooCommerce Certification Evidence** workflow.
    - Download `woocommerce-certification.json`.
    - Place it at `evidence/woocommerce-certification.json`.
 
-4. Validate the private beta evidence folder.
+5. Validate the private beta evidence folder.
    - Keep `compose-smoke.json` and `beta-readiness-production.json` from the passing GitHub Actions runs.
    - Optionally run **Beta Release Preflight Evidence** with the completed evidence workflow run IDs.
    - Run `pnpm beta:release:preflight -- --manifest evidence/beta-evidence.manifest.json --github --repo RedeemLoopProtocol/redeemloop-protocol`.
    - Run `pnpm beta:evidence:check -- --manifest evidence/beta-evidence.manifest.json`.
 
-5. Generate the public-safe bilingual release summary.
+6. Generate the public-safe bilingual release summary.
    - Run `pnpm beta:evidence:summary -- --manifest evidence/beta-evidence.manifest.json --out evidence/RELEASE_BETA.md`.
    - Re-run the evidence check.
 
-6. Prepare and gate the beta version.
+7. Prepare and gate the beta version.
    - Choose the beta tag.
    - Run `pnpm beta:version:prepare -- --release <beta-version>`.
    - Run `pnpm beta:version:prepare -- --release <beta-version> --write`.
    - Run `pnpm beta:release:gate -- --manifest evidence/beta-evidence.manifest.json --release <beta-version> --require-version-match`.
 
-7. Publish the first public beta.
+8. Publish the first public beta.
    - Push the version commit and tag.
    - Create the GitHub Release.
    - Paste the public-safe content from `evidence/RELEASE_BETA.md`.
    - Do not attach private evidence artifacts unless they have been reviewed and redacted.
+
+### Production Gap Closure Plan
+
+| Stage | Gap | Construction Task | Done When |
+|-------|-----|-------------------|-----------|
+| 0 | Release claim discipline | Lock the first beta scope to EVM + WooCommerce only | Public docs avoid uncertified Shopify/Rune/Fractal/NFT production claims |
+| 1 | Missing commerce secret | Add `REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY` in GitHub Actions secrets | Preflight secret check passes |
+| 2 | Missing funded EVM evidence | Execute one real ERC-20 voucher transfer and run the EVM certification workflow | `evidence/evm-wallet-certification.json` passes validation |
+| 3 | Missing WooCommerce evidence | Mark one safe WooCommerce test order paid through RedeemLoop and run the commerce workflow | `evidence/woocommerce-certification.json` passes validation and is not dry-run |
+| 4 | Missing public release notes | Generate the public-safe bilingual summary from validated private evidence | `evidence/RELEASE_BETA.md` exists, is bilingual, and is redacted |
+| 5 | Final release gate | Prepare beta version, run strict gate, push tag, publish GitHub Release | `beta:release:gate --require-version-match` and main CI pass |
 
 ### Beta Acceptance Criteria
 
@@ -121,15 +147,18 @@ The first beta must not claim:
 
 ### 当前距离
 
-截至 v0.10.20，代码库已经具备公开 beta 所需的发布工具链，但还不能声明为 production-certified beta。
+截至 v0.10.23，代码库已经具备公开 beta 所需的发布工具链，但还不能声明为 production-certified beta。
 
 剩余距离很窄，主要是证据缺口：
 
 - 还缺 2 个必需的真实认证 artifact。
 - 还缺 1 份最终公开版 release evidence summary。
+- 还缺 1 个用于 commerce certification 的 GitHub secret。
 - 当前 release gate 中没有已知 Phase 0 核心代码阻断项。
 
 Release gate 现在仍然失败，这是有意设计；只有真实 artifact 就位后才应通过。
+
+2026-06-30 最新本地 preflight 结果为：`5 pass`、`1 warn`、`5 fail`。已通过项包括 manifest 加载、compose smoke evidence、production-readiness evidence、仓库选择以及 `REDEEMLOOP_EVM_RPC_URLS` secret。失败项是预期阻断：缺 funded EVM evidence、缺 WooCommerce evidence、缺 beta release notes、缺 commerce certification secret，以及由这些缺失输入导致的 evidence validator 汇总失败。
 
 ### 已经具备
 
@@ -148,6 +177,7 @@ Release gate 现在仍然失败，这是有意设计；只有真实 artifact 就
 | Funded EVM wallet payment | 从真实 ERC-20 提货券转账 receipt 生成 `evidence/evm-wallet-certification.json` | 缺失 |
 | WooCommerce live mark-as-paid | 从真实测试店铺订单确认生成 `evidence/woocommerce-certification.json` | 缺失 |
 | 公开 beta evidence notes | 所有必需私有 artifact 通过校验后生成 `evidence/RELEASE_BETA.md` | 缺失 |
+| Commerce certification secret | GitHub 仓库 secret `REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY` | 缺失 |
 
 首个 beta 中，Shopify live support 是可选声明。Bitcoin Rune、Fractal、inscription 和 NFT 路径必须保持 adapter 或 certification-track 口径，除非另附真实 live evidence。
 
@@ -166,44 +196,66 @@ Release gate 现在仍然失败，这是有意设计；只有真实 artifact 就
 
 ### 施工顺序
 
-1. 执行 funded EVM 提货券支付。
+0. 冻结 beta 声明范围。
+   - 首个 beta 只声明通过证据认证的 EVM ERC-20 提货券支付和 WooCommerce mark-as-paid。
+   - Shopify 保持可选声明。
+   - Bitcoin Rune、Fractal、inscription 和 NFT 保持 adapter / certification-track 口径。
+   - 任一必需 artifact 仍为 placeholder 或缺失时，不发布 beta tag。
+
+1. 配置剩余发布 secret。
+   - 在 GitHub 仓库中设置 `REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY`。
+   - 使用认证部署中的 merchant-scoped RedeemLoop API key。
+   - 重新运行 beta release preflight，确认 secret check 通过。
+
+2. 执行 funded EVM 提货券支付。
    - 使用 hosted payment page、React pay button、widget，或本地 certification console。
    - 广播一笔真实 ERC-20 提货券转账到商户 vault。
    - 记录 chain ID、wallet name/version、PaymentIntent ID、transaction hash、payer、receiver、token contract 和 amount。
 
-2. 生成 funded EVM evidence。
+3. 生成 funded EVM evidence。
    - 运行 **Beta EVM Wallet Certification Evidence** workflow。
    - 下载 `evm-wallet-certification.json`。
    - 放入 `evidence/evm-wallet-certification.json`。
 
-3. 执行 WooCommerce live mark-as-paid 认证。
+4. 执行 WooCommerce live mark-as-paid 认证。
    - 创建或选择一个安全的 WooCommerce 测试订单。
    - 通过 RedeemLoop 确认 settlement。
    - 运行 **Beta WooCommerce Certification Evidence** workflow。
    - 下载 `woocommerce-certification.json`。
    - 放入 `evidence/woocommerce-certification.json`。
 
-4. 校验私有 beta evidence 目录。
+5. 校验私有 beta evidence 目录。
    - 保留已通过 GitHub Actions 生成的 `compose-smoke.json` 和 `beta-readiness-production.json`。
    - 可以用已完成的 evidence workflow run ID 运行 **Beta Release Preflight Evidence**。
    - 运行 `pnpm beta:release:preflight -- --manifest evidence/beta-evidence.manifest.json --github --repo RedeemLoopProtocol/redeemloop-protocol`。
    - 运行 `pnpm beta:evidence:check -- --manifest evidence/beta-evidence.manifest.json`。
 
-5. 生成公开安全的双语 release summary。
+6. 生成公开安全的双语 release summary。
    - 运行 `pnpm beta:evidence:summary -- --manifest evidence/beta-evidence.manifest.json --out evidence/RELEASE_BETA.md`。
    - 再次运行 evidence check。
 
-6. 准备并执行 beta version gate。
+7. 准备并执行 beta version gate。
    - 选择 beta tag。
    - 运行 `pnpm beta:version:prepare -- --release <beta-version>`。
    - 运行 `pnpm beta:version:prepare -- --release <beta-version> --write`。
    - 运行 `pnpm beta:release:gate -- --manifest evidence/beta-evidence.manifest.json --release <beta-version> --require-version-match`。
 
-7. 发布首个公开 beta。
+8. 发布首个公开 beta。
    - 推送 version commit 和 tag。
    - 创建 GitHub Release。
    - 粘贴 `evidence/RELEASE_BETA.md` 中的公开安全内容。
    - 除非已经人工检查并脱敏，不要上传私有 evidence artifacts。
+
+### 生产缺口补齐施工计划
+
+| 阶段 | 缺口 | 施工任务 | 完成标准 |
+|------|------|----------|----------|
+| 0 | 发布声明口径 | 首个 beta 范围锁定为 EVM + WooCommerce | 公开文档不声明未认证的 Shopify/Rune/Fractal/NFT production support |
+| 1 | 缺 commerce secret | 在 GitHub Actions secrets 中添加 `REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY` | Preflight secret check 通过 |
+| 2 | 缺 funded EVM evidence | 执行一笔真实 ERC-20 提货券转账，并运行 EVM certification workflow | `evidence/evm-wallet-certification.json` 通过校验 |
+| 3 | 缺 WooCommerce evidence | 通过 RedeemLoop 把一个安全 WooCommerce 测试订单标记为 paid，并运行 commerce workflow | `evidence/woocommerce-certification.json` 通过校验，且不是 dry-run |
+| 4 | 缺公开 release notes | 用已校验私有 evidence 生成公开安全的双语 summary | `evidence/RELEASE_BETA.md` 存在、双语、且已脱敏 |
+| 5 | 最终发布 gate | 准备 beta version，运行 strict gate，推送 tag，发布 GitHub Release | `beta:release:gate --require-version-match` 和 main CI 通过 |
 
 ### Beta 验收标准
 
