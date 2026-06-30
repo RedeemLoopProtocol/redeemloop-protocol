@@ -46,6 +46,7 @@ try {
   }
 
   collectGithubChecks(input, checks, nextActions);
+  collectSecretEnvChecks(input, checks, nextActions);
 
   const report = {
     checkedAt: new Date().toISOString(),
@@ -173,6 +174,23 @@ function collectGithubChecks(input, output, nextActions) {
   }
 }
 
+function collectSecretEnvChecks(input, output, nextActions) {
+  for (const mapping of input.secretEnv) {
+    const [secretName, envName] = mapping.split("=");
+    if (!stringValue(secretName) || !stringValue(envName)) {
+      output.push(fail("secret.env.mapping", "Secret environment mapping must use SECRET_NAME=ENV_VAR", mapping));
+      continue;
+    }
+    if (stringValue(process.env[envName])) {
+      output.push(pass(`secret.env.${secretName}`, "Required secret environment variable is present", envName));
+    } else {
+      output.push(fail(`secret.env.${secretName}`, "Required secret environment variable is missing", envName));
+      const known = REQUIRED_SECRETS.find((secret) => secret.name === secretName);
+      nextActions.push(known?.action ?? `Set ${secretName} before running beta certification workflows.`);
+    }
+  }
+}
+
 function inferGithubRepo() {
   const result = spawnSync("git", ["remote", "get-url", "origin"], {
     cwd: process.cwd(),
@@ -191,6 +209,7 @@ function parseArgs(argv) {
     github: false,
     json: false,
     help: false,
+    secretEnv: [],
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -200,6 +219,7 @@ function parseArgs(argv) {
     else if (arg === "--help" || arg === "-h") parsed.help = true;
     else if (arg === "--manifest") parsed.manifest = requireNextValue(argv, ++index, arg);
     else if (arg === "--repo") parsed.repo = requireNextValue(argv, ++index, arg);
+    else if (arg === "--secret-env") parsed.secretEnv.push(requireNextValue(argv, ++index, arg));
     else throw new Error(`Unknown argument: ${arg}`);
   }
   return parsed;
@@ -210,6 +230,7 @@ function normalizeInput(raw) {
     manifest: resolve(raw.manifest ?? "evidence/beta-evidence.manifest.json"),
     repo: raw.repo,
     github: raw.github,
+    secretEnv: raw.secretEnv,
     json: raw.json,
   };
 }
@@ -218,11 +239,12 @@ function printHelp() {
   console.log(`RedeemLoop beta release preflight
 
 Usage:
-  node scripts/beta-release-preflight.mjs --manifest evidence/beta-evidence.manifest.json [--github] [--repo owner/name] [--json]
+  node scripts/beta-release-preflight.mjs --manifest evidence/beta-evidence.manifest.json [--github] [--repo owner/name] [--secret-env SECRET_NAME=ENV_VAR] [--json]
 
 The preflight summarizes the remaining beta publication blockers from the evidence manifest.
 It is read-only: it does not send wallet transactions, call commerce adapters, or read secret values.
 Use --github to verify required repository secret names with the GitHub CLI.
+Use --secret-env in GitHub Actions to verify that a secret was injected into an environment variable without printing the value.
 `);
 }
 

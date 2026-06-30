@@ -39,6 +39,7 @@
 - Tightened `pnpm beta:evidence:summary` so `--out` must match the manifest `releaseNotes.path` unless explicitly overridden.
 - Added a bilingual beta release execution plan that states the remaining live-evidence blockers before the first public beta.
 - Added `pnpm beta:release:preflight` to summarize missing beta evidence artifacts and optional GitHub secret-name checks before the final release gate.
+- Added a manual GitHub Actions workflow for beta release preflight reports from existing evidence workflow artifacts.
 - Added `pnpm beta:version:prepare` to dry-run or apply a consistent workspace package version before the strict beta release gate.
 - Added bilingual beta readiness guide at `docs/BETA_READINESS.md`.
 - Reworked the official website from a construction/status page into a merchant-facing product homepage.
@@ -83,6 +84,7 @@
 - 新增双语 beta 发布施工计划，明确首个公开 beta 前剩余的 live-evidence 阻断项。
 - 收紧 `pnpm beta:evidence:summary`：除非显式覆盖，否则 `--out` 必须与 manifest 中的 `releaseNotes.path` 一致。
 - 新增 `pnpm beta:release:preflight`，用于在最终 release gate 前汇总缺失的 beta evidence artifact，并可选检查 GitHub secret 名称。
+- 新增用于生成 beta release preflight report 的手动 GitHub Actions workflow，可从已有 evidence workflow artifacts 汇总状态。
 - 新增 `pnpm beta:version:prepare`，用于在 strict beta release gate 前 dry-run 或写入一致的 workspace package version。
 - 新增双语 beta readiness 指南：`docs/BETA_READINESS.md`。
 - 将官网从施工说明/工程状态页升级为面向商户的正式产品官网首页。

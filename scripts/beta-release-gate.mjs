@@ -150,6 +150,7 @@ async function checkGithubWorkflows(output) {
   const productionReadiness = await readText(".github/workflows/beta-production-readiness.yml", output);
   const evmCertification = await readText(".github/workflows/beta-evm-certification.yml", output);
   const commerceCertification = await readText(".github/workflows/beta-commerce-certification.yml", output);
+  const releasePreflight = await readText(".github/workflows/beta-release-preflight.yml", output);
 
   if (ci && ci.includes("pnpm install --frozen-lockfile") && ci.includes("pnpm build") && ci.includes("pnpm test")) {
     output.push(pass("github.ci", "CI workflow covers install, test, and build", undefined));
@@ -225,6 +226,24 @@ async function checkGithubWorkflows(output) {
     output.push(pass("github.beta_woocommerce_certification", "Beta WooCommerce certification workflow is present", undefined));
   } else {
     output.push(fail("github.beta_woocommerce_certification", "Beta WooCommerce certification workflow must collect live mark-as-paid evidence and upload an artifact", commerceCertificationRequirements));
+  }
+
+  const releasePreflightRequirements = {
+    workflowDispatch: releasePreflight?.includes("workflow_dispatch:") ?? false,
+    frozenInstall: releasePreflight?.includes("pnpm install --frozen-lockfile") ?? false,
+    evidenceInit: releasePreflight?.includes("pnpm --silent beta:evidence:init") ?? false,
+    artifactDownload: releasePreflight?.includes("gh run download") ?? false,
+    preflightCommand: releasePreflight?.includes("pnpm --silent beta:release:preflight") ?? false,
+    evmSecretEnv: releasePreflight?.includes("REDEEMLOOP_EVM_RPC_URLS=REDEEMLOOP_EVM_RPC_URLS") ?? false,
+    commerceSecretEnv: releasePreflight?.includes("REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY=REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY") ?? false,
+    jsonValidation: releasePreflight?.includes("JSON.parse") ?? false,
+    artifactUpload: releasePreflight?.includes("actions/upload-artifact") ?? false,
+    artifactName: releasePreflight?.includes("redeemloop-beta-release-preflight") ?? false,
+  };
+  if (Object.values(releasePreflightRequirements).every(Boolean)) {
+    output.push(pass("github.beta_release_preflight", "Beta release preflight workflow is present", undefined));
+  } else {
+    output.push(fail("github.beta_release_preflight", "Beta release preflight workflow must initialize evidence, optionally download artifacts, run preflight, and upload a preflight report", releasePreflightRequirements));
   }
 }
 
