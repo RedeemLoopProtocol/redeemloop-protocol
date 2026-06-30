@@ -147,6 +147,7 @@ async function checkGithubWorkflows(output) {
   const ci = await readText(".github/workflows/ci.yml", output);
   const pages = await readText(".github/workflows/pages.yml", output);
   const composeSmoke = await readText(".github/workflows/beta-compose-smoke.yml", output);
+  const productionReadiness = await readText(".github/workflows/beta-production-readiness.yml", output);
 
   if (ci && ci.includes("pnpm install --frozen-lockfile") && ci.includes("pnpm build") && ci.includes("pnpm test")) {
     output.push(pass("github.ci", "CI workflow covers install, test, and build", undefined));
@@ -173,6 +174,24 @@ async function checkGithubWorkflows(output) {
     output.push(pass("github.beta_compose_smoke", "Beta compose-smoke evidence workflow is present", undefined));
   } else {
     output.push(fail("github.beta_compose_smoke", "Beta compose-smoke evidence workflow must build, run smoke, validate JSON, and upload the evidence artifact", composeSmokeRequirements));
+  }
+
+  const productionReadinessRequirements = {
+    workflowDispatch: productionReadiness?.includes("workflow_dispatch:") ?? false,
+    evmRpcSecret: productionReadiness?.includes("secrets.REDEEMLOOP_EVM_RPC_URLS") ?? false,
+    frozenInstall: productionReadiness?.includes("pnpm install --frozen-lockfile") ?? false,
+    workspaceBuild: productionReadiness?.includes("pnpm build") ?? false,
+    composeKeepUp: productionReadiness?.includes("pnpm --silent beta:smoke:compose -- --keep-up --json") ?? false,
+    productionCheckJson: productionReadiness?.includes("pnpm --silent beta:check:production -- --json") ?? false,
+    jsonValidation: productionReadiness?.includes("JSON.parse") ?? false,
+    composeDown: productionReadiness?.includes("docker compose down") ?? false,
+    artifactUpload: productionReadiness?.includes("actions/upload-artifact") ?? false,
+    artifactName: productionReadiness?.includes("redeemloop-production-readiness-evidence") ?? false,
+  };
+  if (Object.values(productionReadinessRequirements).every(Boolean)) {
+    output.push(pass("github.beta_production_readiness", "Beta production-readiness evidence workflow is present", undefined));
+  } else {
+    output.push(fail("github.beta_production_readiness", "Beta production-readiness evidence workflow must run compose, collect production readiness JSON, clean up, and upload artifacts", productionReadinessRequirements));
   }
 }
 
@@ -305,9 +324,9 @@ Options:
   --require-version-match    Fail unless all package versions match the release tag without leading "v".
   --json                     Print JSON output.
 
-The gate combines evidence validation, bilingual release-note checks, README/CI/Pages/compose-smoke
-release-surface checks, pnpm settings and frozen-lockfile checks, and workspace version consistency before
-publishing a beta release.
+The gate combines evidence validation, bilingual release-note checks, README/CI/Pages/compose-smoke/
+production-readiness release-surface checks, pnpm settings and frozen-lockfile checks, and workspace version
+consistency before publishing a beta release.
 `);
 }
 

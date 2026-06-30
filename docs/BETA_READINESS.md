@@ -48,6 +48,14 @@ The command starts Docker Compose, waits for the API at `http://127.0.0.1:3002`,
 
 If the local machine does not have Docker, run the **Beta Compose Smoke Evidence** GitHub Actions workflow manually. It builds the workspace on an Ubuntu runner, runs `pnpm --silent beta:smoke:compose -- --json`, validates that the output is JSON, and uploads `compose-smoke.json` as a workflow artifact. Download that artifact into `evidence/compose-smoke.json` before running the beta evidence manifest validator.
 
+### Production Readiness Workflow
+
+Set the GitHub repository secret `REDEEMLOOP_EVM_RPC_URLS` before running **Beta Production Readiness Evidence**. Use the same format as `EVM_RPC_URLS`, for example a JSON object keyed by EVM chain ID. Do not commit RPC URLs that contain provider API keys.
+
+The workflow starts the Docker Compose stack with Postgres, API, worker, and console, injects `EVM_RPC_URLS` into the API service, runs `pnpm --silent beta:smoke:compose -- --keep-up --json`, runs `pnpm --silent beta:check:production -- --json`, validates both JSON reports, stops Docker Compose, and uploads `beta-readiness-production.json` plus a fresh `compose-smoke.json` as `redeemloop-production-readiness-evidence`.
+
+Download `beta-readiness-production.json` into `evidence/beta-readiness-production.json` before running the beta evidence manifest validator. This workflow proves production-readiness signals for the configured runner environment; it is not a substitute for funded wallet or live store certification.
+
 ### Checks
 
 - `GET /health`
@@ -155,7 +163,7 @@ pnpm beta:release:gate -- \
   --require-version-match
 ```
 
-`beta:version:prepare` is dry-run by default. Add `--write` only after external evidence is real and the beta release tag is chosen. The release gate reruns evidence validation, checks that release notes contain separate English and Chinese sections, rejects placeholder text, checks for obvious secret-like material, verifies README beta-readiness links, checks CI/Pages/compose-smoke evidence workflow presence, verifies active pnpm workspace overrides, runs a frozen lockfile check, and confirms all workspace package versions match the release tag when `--require-version-match` is set.
+`beta:version:prepare` is dry-run by default. Add `--write` only after external evidence is real and the beta release tag is chosen. The release gate reruns evidence validation, checks that release notes contain separate English and Chinese sections, rejects placeholder text, checks for obvious secret-like material, verifies README beta-readiness links, checks CI/Pages/compose-smoke/production-readiness evidence workflow presence, verifies active pnpm workspace overrides, runs a frozen lockfile check, and confirms all workspace package versions match the release tag when `--require-version-match` is set.
 
 ## 中文
 
@@ -204,6 +212,14 @@ pnpm beta:smoke:compose
 该命令会启动 Docker Compose，等待 `http://127.0.0.1:3002` 的 API、等待 `http://127.0.0.1:3000` 的 console，验证 `persistence.kind: "postgres"`，验证最近的 webhook worker heartbeat，输出报告，然后默认执行 `docker compose down`。使用 `--keep-up` 可以保留服务运行，使用 `--json` 可以归档结果。
 
 如果本机没有 Docker，可以手动运行 **Beta Compose Smoke Evidence** GitHub Actions workflow。它会在 Ubuntu runner 上构建 workspace，运行 `pnpm --silent beta:smoke:compose -- --json`，校验输出是 JSON，并把 `compose-smoke.json` 上传为 workflow artifact。下载该 artifact 到 `evidence/compose-smoke.json` 后，再运行 beta evidence manifest validator。
+
+### Production Readiness Workflow
+
+运行 **Beta Production Readiness Evidence** 前，先在 GitHub 仓库 secret 中设置 `REDEEMLOOP_EVM_RPC_URLS`。格式与 `EVM_RPC_URLS` 相同，例如以 EVM chain ID 为 key 的 JSON object。不要把包含 provider API key 的 RPC URL 提交进仓库。
+
+该 workflow 会启动包含 Postgres、API、worker 和 console 的 Docker Compose stack，把 `EVM_RPC_URLS` 注入 API service，运行 `pnpm --silent beta:smoke:compose -- --keep-up --json`，再运行 `pnpm --silent beta:check:production -- --json`，校验两个 JSON report，停止 Docker Compose，并把 `beta-readiness-production.json` 和新的 `compose-smoke.json` 上传为 `redeemloop-production-readiness-evidence`。
+
+运行 beta evidence manifest validator 前，把 `beta-readiness-production.json` 下载到 `evidence/beta-readiness-production.json`。该 workflow 证明的是当前 runner 环境的 production-readiness signals；它不能替代 funded wallet 或 live store certification。
 
 ### 检查项
 
@@ -312,4 +328,4 @@ pnpm beta:release:gate -- \
   --require-version-match
 ```
 
-`beta:version:prepare` 默认是 dry-run。只有在外部证据真实齐备、beta release tag 已确定后，才添加 `--write`。该 release gate 会重新运行 evidence validation，检查 release notes 是否包含独立 English 和中文章节，拒绝占位文本，检查明显 secret-like material，确认 README beta-readiness 链接，检查 CI/Pages/compose-smoke evidence workflow 是否存在，确认 pnpm workspace overrides 处于有效配置位置，运行 frozen lockfile 检查，并在设置 `--require-version-match` 时确认所有 workspace package version 与 release tag 一致。
+`beta:version:prepare` 默认是 dry-run。只有在外部证据真实齐备、beta release tag 已确定后，才添加 `--write`。该 release gate 会重新运行 evidence validation，检查 release notes 是否包含独立 English 和中文章节，拒绝占位文本，检查明显 secret-like material，确认 README beta-readiness 链接，检查 CI/Pages/compose-smoke/production-readiness evidence workflow 是否存在，确认 pnpm workspace overrides 处于有效配置位置，运行 frozen lockfile 检查，并在设置 `--require-version-match` 时确认所有 workspace package version 与 release tag 一致。

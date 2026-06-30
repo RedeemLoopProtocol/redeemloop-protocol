@@ -26,6 +26,7 @@ services:
       REDEEMLOOP_DATABASE_URL: postgres://redeemloop:redeemloop@postgres:5432/redeemloop
       REDEEMLOOP_API_KEYS: '{"merchant_cafe":"dev-secret"}'
       REDEEMLOOP_EMBED_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      EVM_RPC_URLS: ${EVM_RPC_URLS:-}
       EVM_MIN_CONFIRMATIONS: 1
       WEBHOOK_MAX_ATTEMPTS: 5
       WEBHOOK_DELIVERY_LEASE_MS: 60000

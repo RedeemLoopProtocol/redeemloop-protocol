@@ -1,0 +1,92 @@
+name: Beta Production Readiness Evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-readiness:
+    name: Generate production readiness evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      EVM_RPC_URLS: ${{ secrets.REDEEMLOOP_EVM_RPC_URLS }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install forge-std
+        working-directory: packages/contracts
+        run: forge install foundry-rs/forge-std --no-git
+
+      - name: Validate EVM RPC configuration
+        run: |
+          if [ -z "$EVM_RPC_URLS" ]; then
+            echo "::error::Set the REDEEMLOOP_EVM_RPC_URLS repository secret before running this workflow."
+            exit 1
+          fi
+          node - <<'NODE'
+          const value = process.env.EVM_RPC_URLS?.trim();
+          if (!value) throw new Error("REDEEMLOOP_EVM_RPC_URLS is required");
+          if (value.startsWith("{")) {
+            const parsed = JSON.parse(value);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("REDEEMLOOP_EVM_RPC_URLS JSON must be an object");
+            if (Object.keys(parsed).length === 0) throw new Error("REDEEMLOOP_EVM_RPC_URLS must include at least one chain");
+          }
+          NODE
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Run production readiness
+        run: |
+          mkdir -p evidence
+          pnpm --silent beta:smoke:compose -- --keep-up --json > evidence/compose-smoke.json
+          REDEEMLOOP_API_BASE_URL=http://127.0.0.1:3002 \
+          REDEEMLOOP_MERCHANT_ID=merchant_cafe \
+          REDEEMLOOP_API_KEY=dev-secret \
+          pnpm --silent beta:check:production -- --json > evidence/beta-readiness-production.json
+          node - <<'NODE'
+          const fs = require("node:fs");
+          for (const file of ["evidence/compose-smoke.json", "evidence/beta-readiness-production.json"]) {
+            const report = JSON.parse(fs.readFileSync(file, "utf8"));
+            if (Number(report.summary?.fail ?? 0) > 0) {
+              throw new Error(`${file} contains failing checks`);
+            }
+          }
+          NODE
+
+      - name: Stop Docker Compose
+        if: always()
+        run: docker compose down
+
+      - name: Upload production readiness evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: redeemloop-production-readiness-evidence
+          path: |
+            evidence/compose-smoke.json
+            evidence/beta-readiness-production.json
+          if-no-files-found: error
