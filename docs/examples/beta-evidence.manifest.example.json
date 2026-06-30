@@ -29,7 +29,7 @@
       "type": "commerce-certification"
     },
     "releaseNotes": {
-      "path": "docs/RELEASE_BETA.md",
+      "path": "evidence/RELEASE_BETA.md",
       "required": true,
       "type": "markdown"
     }

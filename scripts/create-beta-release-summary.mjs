@@ -14,6 +14,7 @@ if (args.help) {
 try {
   const input = normalizeInput(args);
   const manifest = await readJson(input.manifest);
+  checkReleaseNotesOutputPath(input, manifest);
   const validation = runEvidenceCheck(input.manifest);
   const blockingFailures = validation.checks.filter((item) => item.status === "fail" && !item.name.startsWith("artifact.releaseNotes"));
   if (blockingFailures.length > 0 && !input.allowInvalid) {
@@ -189,12 +190,14 @@ function parseArgs(argv) {
   const parsed = {
     help: false,
     allowInvalid: false,
+    allowOutputMismatch: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--") continue;
     else if (arg === "--help" || arg === "-h") parsed.help = true;
     else if (arg === "--allow-invalid") parsed.allowInvalid = true;
+    else if (arg === "--allow-output-mismatch") parsed.allowOutputMismatch = true;
     else if (arg === "--manifest") parsed.manifest = requireNextValue(argv, ++index, arg);
     else if (arg === "--out") parsed.out = requireNextValue(argv, ++index, arg);
     else throw new Error(`Unknown argument: ${arg}`);
@@ -207,6 +210,7 @@ function normalizeInput(raw) {
     manifest: resolve(raw.manifest ?? "evidence/beta-evidence.manifest.json"),
     out: raw.out ? resolve(raw.out) : undefined,
     allowInvalid: raw.allowInvalid,
+    allowOutputMismatch: raw.allowOutputMismatch,
   };
 }
 
@@ -220,10 +224,21 @@ Options:
   --manifest PATH    Evidence manifest. Defaults to evidence/beta-evidence.manifest.json.
   --out PATH         Write the bilingual Markdown summary to PATH. Without this flag, prints to stdout.
   --allow-invalid    Generate a diagnostic summary even when non-release-note evidence has failures.
+  --allow-output-mismatch
+                     Allow --out to differ from the manifest releaseNotes.path.
 
 The command generates public-safe bilingual release evidence notes from validated certification artifacts.
 It allows the existing releaseNotes artifact to be missing or placeholder because it is meant to create it.
 `);
+}
+
+function checkReleaseNotesOutputPath(input, manifest) {
+  if (!input.out || input.allowOutputMismatch) return;
+  const manifestPath = stringValue(manifest.artifacts?.releaseNotes?.path);
+  if (!manifestPath) return;
+  if (resolve(manifestPath) !== input.out) {
+    throw new Error(`Output path must match manifest releaseNotes.path (${manifestPath}). Pass --allow-output-mismatch to override.`);
+  }
 }
 
 function requireNextValue(argv, index, flag) {

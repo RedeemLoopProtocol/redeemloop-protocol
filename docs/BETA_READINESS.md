@@ -154,6 +154,8 @@ pnpm --silent beta:evidence:summary -- \
 
 The command validates all non-release-note artifacts before writing the summary. It redacts wallet addresses, transaction hashes, store URLs, and order identifiers by default, so the generated Markdown can be copied into a GitHub Release without exposing the private evidence files.
 
+The `--out` path must match `manifest.artifacts.releaseNotes.path` unless `--allow-output-mismatch` is explicitly passed for diagnostics.
+
 ### Release Gate
 
 After all evidence artifacts are real and the release notes are final, run the combined beta release gate:
@@ -322,6 +324,8 @@ pnpm --silent beta:evidence:summary -- \
 ```
 
 该命令会在写入 summary 前校验所有非 release-note artifact。默认会截短钱包地址、交易哈希、店铺 URL 和订单标识，因此生成的 Markdown 可以放入 GitHub Release，而不直接暴露完整私有 evidence 文件。
+
+除非显式传入 `--allow-output-mismatch` 做诊断输出，否则 `--out` 路径必须与 `manifest.artifacts.releaseNotes.path` 一致。
 
 ### Release Gate
 

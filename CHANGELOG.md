@@ -35,6 +35,8 @@
 - Tightened `pnpm beta:release:gate` so the production-readiness evidence workflow must be present and artifact-producing before release.
 - Added manual GitHub Actions workflows for funded EVM wallet and WooCommerce mark-as-paid certification evidence.
 - Tightened `pnpm beta:release:gate` so the EVM wallet and WooCommerce certification workflows must be present before release.
+- Aligned the example beta evidence manifest release-note path with the scaffolded `evidence/RELEASE_BETA.md` path.
+- Tightened `pnpm beta:evidence:summary` so `--out` must match the manifest `releaseNotes.path` unless explicitly overridden.
 - Added `pnpm beta:version:prepare` to dry-run or apply a consistent workspace package version before the strict beta release gate.
 - Added bilingual beta readiness guide at `docs/BETA_READINESS.md`.
 - Reworked the official website from a construction/status page into a merchant-facing product homepage.
@@ -75,6 +77,8 @@
 - 收紧 `pnpm beta:release:gate`：发布前必须存在可生成 artifact 的 production-readiness evidence workflow。
 - 新增用于生成 funded EVM wallet 和 WooCommerce mark-as-paid certification evidence 的手动 GitHub Actions workflow。
 - 收紧 `pnpm beta:release:gate`：发布前必须存在 EVM wallet 和 WooCommerce certification workflow。
+- 将示例 beta evidence manifest 的 release-note 路径对齐到 scaffold 使用的 `evidence/RELEASE_BETA.md`。
+- 收紧 `pnpm beta:evidence:summary`：除非显式覆盖，否则 `--out` 必须与 manifest 中的 `releaseNotes.path` 一致。
 - 新增 `pnpm beta:version:prepare`，用于在 strict beta release gate 前 dry-run 或写入一致的 workspace package version。
 - 新增双语 beta readiness 指南：`docs/BETA_READINESS.md`。
 - 将官网从施工说明/工程状态页升级为面向商户的正式产品官网首页。
