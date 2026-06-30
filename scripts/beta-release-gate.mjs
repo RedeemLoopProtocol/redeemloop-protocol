@@ -124,6 +124,13 @@ async function checkReleaseNotes(manifest, output) {
   } else {
     output.push(pass("release.notes.secrets", "Release notes do not contain obvious secret material", path));
   }
+
+  const publicMetadataLeaks = findPublicMetadataLeaks(raw);
+  if (publicMetadataLeaks.length > 0) {
+    output.push(fail("release.notes.public_metadata", "Release notes contain unredacted public chain metadata", publicMetadataLeaks));
+  } else {
+    output.push(pass("release.notes.public_metadata", "Release notes do not contain full EVM addresses or transaction hashes", path));
+  }
 }
 
 async function checkReadmeGate(output) {
@@ -438,6 +445,20 @@ function findSecretLikeText(raw) {
     ["webhook_secret_literal", /\bwebhook[_ -]?secret\s*[:=]\s*['"]?[A-Za-z0-9._~+/=-]{16,}/gi],
     ["woocommerce_secret", /\bcs_[A-Za-z0-9]{20,}/g],
     ["github_token", /\bgh[pousr]_[A-Za-z0-9_]{30,}/g],
+  ];
+  const matches = [];
+  for (const [type, pattern] of patterns) {
+    for (const match of raw.matchAll(pattern)) {
+      matches.push({ type, sample: redactSecret(match[0]) });
+    }
+  }
+  return matches;
+}
+
+function findPublicMetadataLeaks(raw) {
+  const patterns = [
+    ["evm_tx_hash", /\b0x[0-9a-fA-F]{64}\b/g],
+    ["evm_address", /\b0x[0-9a-fA-F]{40}\b/g],
   ];
   const matches = [];
   for (const [type, pattern] of patterns) {

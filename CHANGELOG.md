@@ -45,6 +45,7 @@
 - Made the WooCommerce certification workflow require the settlement transaction hash and added a release-gate check for that requirement.
 - Added `pnpm beta:evidence:init -- --missing-only` to restore a missing local evidence manifest or placeholder files without overwriting existing evidence artifacts.
 - Added a bilingual beta operator runbook for GitHub secret setup, funded EVM evidence, WooCommerce evidence, release-note generation, final gate execution, and GitHub Release publication.
+- Tightened the beta evidence and release gates so public Markdown release artifacts fail when they contain full EVM addresses or transaction hashes.
 - Added `pnpm beta:version:prepare` to dry-run or apply a consistent workspace package version before the strict beta release gate.
 - Added bilingual beta readiness guide at `docs/BETA_READINESS.md`.
 - Reworked the official website from a construction/status page into a merchant-facing product homepage.
@@ -95,6 +96,7 @@
 - WooCommerce certification workflow 现在必须填写 settlement transaction hash，并新增 release-gate 检查防止该要求被放松。
 - 新增 `pnpm beta:evidence:init -- --missing-only`，可在不覆盖已有 evidence artifact 的情况下恢复缺失的本地 evidence manifest 或占位文件。
 - 新增双语 beta 发布操作手册，覆盖 GitHub secret 设置、funded EVM evidence、WooCommerce evidence、release-note 生成、最终 gate 和 GitHub Release 发布。
+- 收紧 beta evidence 和 release gates：公开 Markdown release artifact 中出现完整 EVM 地址或交易哈希时会失败。
 - 新增 `pnpm beta:version:prepare`，用于在 strict beta release gate 前 dry-run 或写入一致的 workspace package version。
 - 新增双语 beta readiness 指南：`docs/BETA_READINESS.md`。
 - 将官网从施工说明/工程状态页升级为面向商户的正式产品官网首页。
