@@ -194,7 +194,7 @@ pnpm beta:release:gate -- \
   --require-version-match
 ```
 
-`beta:version:prepare` is dry-run by default. Add `--write` only after external evidence is real and the beta release tag is chosen. The release gate reruns evidence validation, checks that release notes contain separate English and Chinese sections, rejects placeholder text, checks for obvious secret-like material, verifies README beta-readiness links, checks CI/Pages/compose-smoke/production-readiness/EVM/WooCommerce evidence workflow presence, verifies active pnpm workspace overrides, runs a frozen lockfile check, and confirms all workspace package versions match the release tag when `--require-version-match` is set.
+`beta:version:prepare` is dry-run by default. Add `--write` only after external evidence is real and the beta release tag is chosen. The release gate reruns evidence validation, checks that release notes contain separate English and Chinese sections, rejects placeholder text, checks for obvious secret-like material and unredacted EVM addresses or transaction hashes, verifies README beta-readiness links, checks CI/Pages/compose-smoke/production-readiness/EVM/WooCommerce evidence workflow presence, verifies active pnpm workspace overrides, runs a frozen lockfile check, and confirms all workspace package versions match the release tag when `--require-version-match` is set.
 
 ## 中文
 
@@ -390,4 +390,4 @@ pnpm beta:release:gate -- \
   --require-version-match
 ```
 
-`beta:version:prepare` 默认是 dry-run。只有在外部证据真实齐备、beta release tag 已确定后，才添加 `--write`。该 release gate 会重新运行 evidence validation，检查 release notes 是否包含独立 English 和中文章节，拒绝占位文本，检查明显 secret-like material，确认 README beta-readiness 链接，检查 CI/Pages/compose-smoke/production-readiness/EVM/WooCommerce evidence workflow 是否存在，确认 pnpm workspace overrides 处于有效配置位置，运行 frozen lockfile 检查，并在设置 `--require-version-match` 时确认所有 workspace package version 与 release tag 一致。
+`beta:version:prepare` 默认是 dry-run。只有在外部证据真实齐备、beta release tag 已确定后，才添加 `--write`。该 release gate 会重新运行 evidence validation，检查 release notes 是否包含独立 English 和中文章节，拒绝占位文本，检查明显 secret-like material 以及未脱敏的 EVM 地址或交易哈希，确认 README beta-readiness 链接，检查 CI/Pages/compose-smoke/production-readiness/EVM/WooCommerce evidence workflow 是否存在，确认 pnpm workspace overrides 处于有效配置位置，运行 frozen lockfile 检查，并在设置 `--require-version-match` 时确认所有 workspace package version 与 release tag 一致。

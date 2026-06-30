@@ -237,7 +237,32 @@ function checkMarkdownArtifact(name, raw, output) {
     output.push(fail(`artifact.${name}`, "Markdown artifact still contains the beta evidence placeholder marker", undefined));
     return;
   }
+  const publicMetadataLeaks = findPublicMetadataLeaks(raw);
+  if (publicMetadataLeaks.length > 0) {
+    output.push(fail(`artifact.${name}.public_metadata`, "Markdown artifact contains unredacted public chain metadata", publicMetadataLeaks));
+    return;
+  }
   output.push(pass(`artifact.${name}`, "Markdown artifact exists", undefined));
+}
+
+function findPublicMetadataLeaks(raw) {
+  const patterns = [
+    ["evm_tx_hash", /\b0x[0-9a-fA-F]{64}\b/g],
+    ["evm_address", /\b0x[0-9a-fA-F]{40}\b/g],
+  ];
+  const matches = [];
+  for (const [type, pattern] of patterns) {
+    for (const match of raw.matchAll(pattern)) {
+      matches.push({ type, sample: redactPublicMetadata(match[0]) });
+    }
+  }
+  return matches;
+}
+
+function redactPublicMetadata(value) {
+  const normalized = String(value);
+  if (normalized.length <= 14) return "***";
+  return `${normalized.slice(0, 8)}...${normalized.slice(-6)}`;
 }
 
 function hasPassingCheck(json, checkName) {
