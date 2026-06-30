@@ -45,8 +45,8 @@ on:
         required: true
         type: string
       tx_hash:
-        description: "Optional settlement transaction hash."
-        required: false
+        description: "Settlement transaction hash; must match the funded EVM evidence."
+        required: true
         type: string
 
 permissions:

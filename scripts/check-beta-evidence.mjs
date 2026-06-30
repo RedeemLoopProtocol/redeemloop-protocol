@@ -23,13 +23,17 @@ if (!stringValue(manifest.release)) {
 }
 
 const artifacts = manifest.artifacts && typeof manifest.artifacts === "object" ? manifest.artifacts : {};
+const loadedArtifacts = {};
 for (const [name, artifact] of Object.entries(artifacts)) {
-  await checkArtifact(name, artifact, checks);
+  const loaded = await checkArtifact(name, artifact, checks);
+  if (loaded !== undefined) loadedArtifacts[name] = loaded;
 }
 
 for (const requiredName of ["composeSmoke", "productionReadiness", "evmWalletCertification", "woocommerceCertification", "releaseNotes"]) {
   if (!artifacts[requiredName]) checks.push(fail(`artifact.${requiredName}`, "Required artifact entry is missing", undefined));
 }
+
+checkRequiredEvidenceConsistency(loadedArtifacts, checks);
 
 const report = {
   checkedAt: new Date().toISOString(),
@@ -70,7 +74,7 @@ async function checkArtifact(name, artifact, output) {
 
   if (type === "markdown") {
     checkMarkdownArtifact(name, raw, output);
-    return;
+    return undefined;
   }
 
   let json;
@@ -78,7 +82,7 @@ async function checkArtifact(name, artifact, output) {
     json = JSON.parse(raw);
   } catch (error) {
     output.push(fail(`artifact.${name}`, "Artifact must be valid JSON", errorMessage(error)));
-    return;
+    return undefined;
   }
 
   if (type === "compose-smoke") checkComposeSmoke(name, json, output);
@@ -86,6 +90,7 @@ async function checkArtifact(name, artifact, output) {
   else if (type === "evm-certification") checkEvmCertification(name, json, output);
   else if (type === "commerce-certification") checkCommerceCertification(name, json, output);
   else output.push(fail(`artifact.${name}.type`, `Unknown artifact type: ${type}`, artifact));
+  return json;
 }
 
 function checkComposeSmoke(name, json, output) {
@@ -155,10 +160,28 @@ function checkEvmCertification(name, json, output) {
 }
 
 function checkCommerceCertification(name, json, output) {
-  const requiredFields = ["provider", "storeUrl", "orderId", "intentId", "markPaidStatus", "checkedAt"];
-  const missing = requiredFields.filter((field) => !stringValue(json[field]));
+  const requiredFields = ["provider", "storeUrl", "orderId", "intentId", "chainId", "merchantId", "voucherToken", "amount", "receiver", "txHash", "markPaidStatus", "checkedAt"];
+  const missing = requiredFields.filter((field) => !stringValue(json[field]) && typeof json[field] !== "number");
   if (missing.length > 0) {
     output.push(fail(`artifact.${name}`, `Commerce certification is missing fields: ${missing.join(", ")}`, json));
+    return;
+  }
+  if (!Number.isSafeInteger(Number(json.chainId)) || Number(json.chainId) <= 0) {
+    output.push(fail(`artifact.${name}`, "Commerce chainId must be a positive integer", json.chainId));
+    return;
+  }
+  for (const field of ["voucherToken", "receiver"]) {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(String(json[field]))) {
+      output.push(fail(`artifact.${name}`, `Commerce ${field} must be an EVM address`, json[field]));
+      return;
+    }
+  }
+  if (!/^[0-9]+$/.test(String(json.amount)) || BigInt(String(json.amount)) <= 0n) {
+    output.push(fail(`artifact.${name}`, "Commerce amount must be a positive integer string", json.amount));
+    return;
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(String(json.txHash))) {
+    output.push(fail(`artifact.${name}`, "Commerce txHash must be a 32-byte hex string", json.txHash));
     return;
   }
   if (typeof json.dryRun !== "boolean") {
@@ -174,6 +197,35 @@ function checkCommerceCertification(name, json, output) {
     return;
   }
   output.push(pass(`artifact.${name}`, "Commerce certification evidence is structurally valid", { provider: json.provider, orderId: json.orderId }));
+}
+
+function checkRequiredEvidenceConsistency(artifacts, output) {
+  const evm = artifacts.evmWalletCertification;
+  const woo = artifacts.woocommerceCertification;
+  if (!evm || !woo) return;
+
+  const comparisons = [
+    ["intentId", stringValue(evm.intentId), stringValue(woo.intentId)],
+    ["chainId", String(evm.chainId ?? ""), String(woo.chainId ?? "")],
+    ["txHash", lowerString(evm.txHash), lowerString(woo.txHash)],
+    ["voucherToken", lowerString(evm.contract), lowerString(woo.voucherToken)],
+    ["receiver", lowerString(evm.to), lowerString(woo.receiver)],
+    ["amount", String(evm.amount ?? ""), String(woo.amount ?? "")],
+  ];
+  const mismatches = comparisons
+    .filter(([, evmValue, wooValue]) => !evmValue || !wooValue || evmValue !== wooValue)
+    .map(([field, evmValue, wooValue]) => ({ field, evm: evmValue, woocommerce: wooValue }));
+
+  if (mismatches.length > 0) {
+    output.push(fail("artifact.consistency.evm_woocommerce", "EVM funded-wallet evidence and WooCommerce mark-as-paid evidence must describe the same payment", mismatches));
+    return;
+  }
+
+  output.push(pass("artifact.consistency.evm_woocommerce", "EVM and WooCommerce evidence describe the same PaymentIntent, transaction, token, receiver, and amount", {
+    intentId: woo.intentId,
+    chainId: woo.chainId,
+    txHash: woo.txHash,
+  }));
 }
 
 function checkMarkdownArtifact(name, raw, output) {
@@ -259,6 +311,10 @@ function summarizeChecks(items) {
 
 function stringValue(value) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function lowerString(value) {
+  return stringValue(value)?.toLowerCase();
 }
 
 function errorMessage(error) {

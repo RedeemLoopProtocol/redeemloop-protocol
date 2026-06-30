@@ -41,6 +41,8 @@
 - Added `pnpm beta:release:preflight` to summarize missing beta evidence artifacts and optional GitHub secret-name checks before the final release gate.
 - Added a manual GitHub Actions workflow for beta release preflight reports from existing evidence workflow artifacts.
 - Hardened the beta release preflight workflow so downloaded evidence artifacts overwrite scaffold placeholders safely and still produce a report when an optional artifact download fails.
+- Tightened beta evidence validation so WooCommerce mark-as-paid evidence must preserve settlement identity fields and match the funded EVM evidence across PaymentIntent, chain ID, transaction hash, voucher token, receiver, and amount.
+- Made the WooCommerce certification workflow require the settlement transaction hash and added a release-gate check for that requirement.
 - Added `pnpm beta:version:prepare` to dry-run or apply a consistent workspace package version before the strict beta release gate.
 - Added bilingual beta readiness guide at `docs/BETA_READINESS.md`.
 - Reworked the official website from a construction/status page into a merchant-facing product homepage.
@@ -87,6 +89,8 @@
 - 新增 `pnpm beta:release:preflight`，用于在最终 release gate 前汇总缺失的 beta evidence artifact，并可选检查 GitHub secret 名称。
 - 新增用于生成 beta release preflight report 的手动 GitHub Actions workflow，可从已有 evidence workflow artifacts 汇总状态。
 - 加固 beta release preflight workflow：下载的 evidence artifacts 可以安全覆盖 scaffold placeholders，且可选 artifact 下载失败时仍会生成报告。
+- 收紧 beta evidence validation：WooCommerce mark-as-paid evidence 必须保留 settlement identity 字段，并与 funded EVM evidence 在 PaymentIntent、chain ID、transaction hash、voucher token、receiver 和 amount 上一致。
+- WooCommerce certification workflow 现在必须填写 settlement transaction hash，并新增 release-gate 检查防止该要求被放松。
 - 新增 `pnpm beta:version:prepare`，用于在 strict beta release gate 前 dry-run 或写入一致的 workspace package version。
 - 新增双语 beta readiness 指南：`docs/BETA_READINESS.md`。
 - 将官网从施工说明/工程状态页升级为面向商户的正式产品官网首页。

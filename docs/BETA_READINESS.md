@@ -89,10 +89,12 @@ Required evidence for a production-certified beta claim:
 - Docker Compose smoke JSON from `pnpm --silent beta:smoke:compose -- --json`.
 - Production readiness JSON from `pnpm --silent beta:check:production -- --json`.
 - Funded EVM wallet certification JSON with chain ID, wallet name/version, PaymentIntent ID, transaction hash, payer, receiver, ERC-20 contract, amount, receipt status, confirmations, and timestamp.
-- WooCommerce mark-as-paid certification JSON with provider, store URL, order ID, PaymentIntent ID, live non-dry-run mark-paid status, and timestamp.
+- WooCommerce mark-as-paid certification JSON with provider, store URL, order ID, PaymentIntent ID, chain ID, merchant ID, voucher token, amount, receiver, transaction hash, live non-dry-run mark-paid status, and timestamp.
 - Beta release notes.
 
 Shopify certification is optional unless the beta release claims Shopify live support.
+
+The required EVM and WooCommerce artifacts must describe the same payment. The beta evidence validator compares PaymentIntent ID, chain ID, transaction hash, ERC-20 voucher token, receiver, and raw amount across the two artifacts before release notes can be generated.
 
 ### Release Preflight
 
@@ -151,7 +153,7 @@ pnpm --silent beta:evidence:commerce -- \
   --out evidence/woocommerce-certification.json
 ```
 
-The command calls `/v1/commerce/confirm` and expects a live `paid` result. Dry-run artifacts are rejected by the beta evidence validator.
+The command calls `/v1/commerce/confirm` and expects a live `paid` result. Dry-run artifacts are rejected by the beta evidence validator. The generated artifact preserves the settlement identity fields so the release gate can prove the WooCommerce order was marked paid from the same EVM transaction recorded in `evm-wallet-certification.json`.
 
 The same WooCommerce certification can be run from GitHub Actions with **Beta WooCommerce Certification Evidence**. Configure `REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY` with a merchant API key for the target RedeemLoop API, run the workflow manually with the live test-store order and settlement fields, then download `woocommerce-certification.json` into `evidence/woocommerce-certification.json`. The workflow is intentionally WooCommerce-specific because WooCommerce is required for the first beta claim; Shopify remains optional unless live Shopify support is claimed.
 
@@ -273,10 +275,12 @@ Production-certified beta 声明所需证据：
 - `pnpm --silent beta:smoke:compose -- --json` 生成的 Docker Compose smoke JSON。
 - `pnpm --silent beta:check:production -- --json` 生成的 production readiness JSON。
 - Funded EVM wallet certification JSON，包含 chain ID、钱包名称/版本、PaymentIntent ID、transaction hash、payer、receiver、ERC-20 contract、amount、receipt status、confirmations 和时间戳。
-- WooCommerce mark-as-paid certification JSON，包含 provider、store URL、order ID、PaymentIntent ID、真实非 dry-run mark-paid status 和时间戳。
+- WooCommerce mark-as-paid certification JSON，包含 provider、store URL、order ID、PaymentIntent ID、chain ID、merchant ID、voucher token、amount、receiver、transaction hash、真实非 dry-run mark-paid status 和时间戳。
 - Beta release notes。
 
 除非 beta release 声明 Shopify live support，否则 Shopify certification 是可选项。
+
+必需的 EVM artifact 和 WooCommerce artifact 必须描述同一笔支付。Beta evidence validator 会在生成 release notes 前，对比两个 artifact 中的 PaymentIntent ID、chain ID、transaction hash、ERC-20 voucher token、receiver 和 raw amount。
 
 ### Release Preflight
 
@@ -335,7 +339,7 @@ pnpm --silent beta:evidence:commerce -- \
   --out evidence/woocommerce-certification.json
 ```
 
-该命令会调用 `/v1/commerce/confirm`，并要求返回真实 `paid` 结果。Dry-run artifact 会被 beta evidence validator 拒绝。
+该命令会调用 `/v1/commerce/confirm`，并要求返回真实 `paid` 结果。Dry-run artifact 会被 beta evidence validator 拒绝。生成的 artifact 会保留 settlement identity 字段，使 release gate 能证明 WooCommerce 订单是由 `evm-wallet-certification.json` 中同一笔 EVM 交易完成标记 paid。
 
 同样的 WooCommerce certification 可以通过 GitHub Actions 的 **Beta WooCommerce Certification Evidence** 运行。先把目标 RedeemLoop API 的 merchant API key 配置到 `REDEEMLOOP_COMMERCE_CERTIFICATION_API_KEY`，再手动运行 workflow，填入 live test-store order 和 settlement 字段，然后把 `woocommerce-certification.json` 下载到 `evidence/woocommerce-certification.json`。该 workflow 故意限定为 WooCommerce，因为首个 beta 必须覆盖 WooCommerce；除非声明 Shopify live support，否则 Shopify 仍是可选证据。
 

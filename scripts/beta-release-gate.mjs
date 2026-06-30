@@ -218,6 +218,7 @@ async function checkGithubWorkflows(output) {
     frozenInstall: commerceCertification?.includes("pnpm install --frozen-lockfile") ?? false,
     evidenceCommand: commerceCertification?.includes("pnpm --silent beta:evidence:commerce") ?? false,
     woocommerceProvider: commerceCertification?.includes("--provider woocommerce") ?? false,
+    txHashRequired: workflowInputRequired(commerceCertification, "tx_hash"),
     jsonValidation: commerceCertification?.includes("JSON.parse") ?? false,
     artifactUpload: commerceCertification?.includes("actions/upload-artifact") ?? false,
     artifactName: commerceCertification?.includes("redeemloop-woocommerce-certification-evidence") ?? false,
@@ -286,6 +287,14 @@ function checkFrozenLockfile(output) {
     return;
   }
   output.push(fail("pnpm.lockfile.frozen", "pnpm frozen lockfile check failed", summaryOutput(result.stderr || result.stdout || result.error?.message || "")));
+}
+
+function workflowInputRequired(text, inputName) {
+  if (!text) return false;
+  const escaped = inputName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(?:^|\\n)\\s{6}${escaped}:\\n([\\s\\S]*?)(?=\\n\\s{6}[a-zA-Z0-9_]+:|\\npermissions:|\\njobs:|$)`);
+  const match = text.match(pattern);
+  return Boolean(match && /(^|\n)\s{8}required:\s*true\s*(\n|$)/.test(match[1]));
 }
 
 async function checkWorkspaceVersions(args, manifest, output) {
