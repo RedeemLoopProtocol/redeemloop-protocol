@@ -158,6 +158,7 @@ async function checkGithubWorkflows(output) {
   const evmCertification = await readText(".github/workflows/beta-evm-certification.yml", output);
   const commerceCertification = await readText(".github/workflows/beta-commerce-certification.yml", output);
   const releasePreflight = await readText(".github/workflows/beta-release-preflight.yml", output);
+  const releaseGate = await readText(".github/workflows/beta-release-gate.yml", output);
 
   if (ci && ci.includes("pnpm install --frozen-lockfile") && ci.includes("pnpm build") && ci.includes("pnpm test")) {
     output.push(pass("github.ci", "CI workflow covers install, test, and build", undefined));
@@ -257,6 +258,30 @@ async function checkGithubWorkflows(output) {
     output.push(pass("github.beta_release_preflight", "Beta release preflight workflow is present", undefined));
   } else {
     output.push(fail("github.beta_release_preflight", "Beta release preflight workflow must initialize evidence, optionally download artifacts, run preflight, and upload a preflight report", releasePreflightRequirements));
+  }
+
+  const releaseGateRequirements = {
+    workflowDispatch: releaseGate?.includes("workflow_dispatch:") ?? false,
+    frozenInstall: releaseGate?.includes("pnpm install --frozen-lockfile") ?? false,
+    evidenceInit: releaseGate?.includes("pnpm --silent beta:evidence:init") ?? false,
+    evidenceDownload: releaseGate?.includes("pnpm --silent beta:evidence:download") ?? false,
+    composeRunId: releaseGate?.includes("--compose-run-id") ?? false,
+    productionRunId: releaseGate?.includes("--production-run-id") ?? false,
+    evmRunId: releaseGate?.includes("--evm-run-id") ?? false,
+    woocommerceRunId: releaseGate?.includes("--woocommerce-run-id") ?? false,
+    releaseSummary: releaseGate?.includes("pnpm --silent beta:evidence:summary") ?? false,
+    releaseGateCommand: releaseGate?.includes("pnpm --silent beta:release:gate") ?? false,
+    requireVersionMatch: releaseGate?.includes("--require-version-match") ?? false,
+    gateJson: releaseGate?.includes("evidence/beta-release-gate.json") ?? false,
+    jsonValidation: releaseGate?.includes("JSON.parse") ?? false,
+    releaseNotesArtifact: releaseGate?.includes("evidence/RELEASE_BETA.md") ?? false,
+    artifactUpload: releaseGate?.includes("actions/upload-artifact") ?? false,
+    artifactName: releaseGate?.includes("redeemloop-beta-release-gate") ?? false,
+  };
+  if (Object.values(releaseGateRequirements).every(Boolean)) {
+    output.push(pass("github.beta_release_gate", "Beta release gate evidence workflow is present", undefined));
+  } else {
+    output.push(fail("github.beta_release_gate", "Beta release gate workflow must download required evidence, generate release notes, run the final gate, and upload the gate report", releaseGateRequirements));
   }
 }
 

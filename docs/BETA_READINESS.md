@@ -206,6 +206,8 @@ pnpm beta:release:gate -- \
 
 `beta:version:prepare` is dry-run by default. Add `--write` only after external evidence is real and the beta release tag is chosen. The release gate reruns evidence validation, checks that release notes contain separate English and Chinese sections, rejects placeholder text, checks for obvious secret-like material and unredacted EVM addresses or transaction hashes, verifies README beta-readiness links, checks CI/Pages/compose-smoke/production-readiness/EVM/WooCommerce evidence workflow presence, verifies active pnpm workspace overrides, runs a frozen lockfile check, and confirms all workspace package versions match the release tag when `--require-version-match` is set.
 
+The same final gate can be reproduced from GitHub Actions with **Beta Release Gate Evidence** after the version commit is prepared. Provide the release tag plus the completed compose-smoke, production-readiness, funded EVM, and WooCommerce certification workflow run IDs. The workflow downloads those artifacts, generates `RELEASE_BETA.md`, runs `pnpm beta:release:gate`, and uploads `beta-release-gate.json` plus the generated public release notes.
+
 ## 中文
 
 `pnpm beta:check` 用于在 beta release 或 pilot run 前采集部署证据。它本身不等于真实钱包、真实店铺或 live commerce flow 已认证；它只验证部署中的 API 是否已经暴露真实认证前所需的最低运维信号。
@@ -411,3 +413,5 @@ pnpm beta:release:gate -- \
 ```
 
 `beta:version:prepare` 默认是 dry-run。只有在外部证据真实齐备、beta release tag 已确定后，才添加 `--write`。该 release gate 会重新运行 evidence validation，检查 release notes 是否包含独立 English 和中文章节，拒绝占位文本，检查明显 secret-like material 以及未脱敏的 EVM 地址或交易哈希，确认 README beta-readiness 链接，检查 CI/Pages/compose-smoke/production-readiness/EVM/WooCommerce evidence workflow 是否存在，确认 pnpm workspace overrides 处于有效配置位置，运行 frozen lockfile 检查，并在设置 `--require-version-match` 时确认所有 workspace package version 与 release tag 一致。
+
+版本提交准备好后，也可以通过 GitHub Actions 的 **Beta Release Gate Evidence** 复现最终 gate。输入 release tag，以及已完成的 compose-smoke、production-readiness、funded EVM 和 WooCommerce certification workflow run IDs。该 workflow 会下载这些 artifacts，生成 `RELEASE_BETA.md`，运行 `pnpm beta:release:gate`，并上传 `beta-release-gate.json` 和生成的公开 release notes。

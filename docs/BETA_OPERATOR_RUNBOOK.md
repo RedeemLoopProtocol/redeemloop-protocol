@@ -193,6 +193,8 @@ pnpm beta:release:gate -- \
   --require-version-match
 ```
 
+Optional GitHub verification: after the version commit is ready, run **Beta Release Gate Evidence** with the chosen release tag and the four required evidence workflow run IDs. Download the `redeemloop-beta-release-gate` artifact and confirm `beta-release-gate.json` has zero failures before publishing.
+
 Only continue if the strict gate passes.
 
 ### Step 8: Publish the Beta
@@ -396,6 +398,8 @@ pnpm beta:release:gate -- \
   --release v0.10.x-beta.0 \
   --require-version-match
 ```
+
+可选 GitHub 校验：version commit 准备好后，运行 **Beta Release Gate Evidence**，填入选定 release tag 和四个必需 evidence workflow run IDs。下载 `redeemloop-beta-release-gate` artifact，并确认 `beta-release-gate.json` 没有失败项，再继续发布。
 
 只有 strict gate 通过后，才能继续。
 

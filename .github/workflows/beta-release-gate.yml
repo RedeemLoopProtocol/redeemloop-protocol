@@ -1,0 +1,110 @@
+name: Beta Release Gate Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Beta release identifier, for example v0.10.0-beta.0."
+        required: true
+        default: "v0.10.x-beta"
+        type: string
+      compose_smoke_run_id:
+        description: "Workflow run ID containing redeemloop-compose-smoke-evidence."
+        required: true
+        type: string
+      production_readiness_run_id:
+        description: "Workflow run ID containing redeemloop-production-readiness-evidence."
+        required: true
+        type: string
+      evm_certification_run_id:
+        description: "Workflow run ID containing redeemloop-evm-wallet-certification-evidence."
+        required: true
+        type: string
+      woocommerce_certification_run_id:
+        description: "Workflow run ID containing redeemloop-woocommerce-certification-evidence."
+        required: true
+        type: string
+      require_version_match:
+        description: "Require workspace package versions to match the beta release tag."
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  release-gate:
+    name: Generate beta release gate evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Initialize evidence manifest
+        run: |
+          pnpm --silent beta:evidence:init -- --dir evidence --release "${{ inputs.release }}" --force
+
+      - name: Download required evidence artifacts
+        run: |
+          pnpm --silent beta:evidence:download -- \
+            --dir evidence \
+            --repo "${{ github.repository }}" \
+            --compose-run-id "${{ inputs.compose_smoke_run_id }}" \
+            --production-run-id "${{ inputs.production_readiness_run_id }}" \
+            --evm-run-id "${{ inputs.evm_certification_run_id }}" \
+            --woocommerce-run-id "${{ inputs.woocommerce_certification_run_id }}"
+
+      - name: Generate public release notes
+        run: |
+          pnpm --silent beta:evidence:summary -- \
+            --manifest evidence/beta-evidence.manifest.json \
+            --out evidence/RELEASE_BETA.md
+
+      - name: Run beta release gate
+        run: |
+          args=(
+            --manifest evidence/beta-evidence.manifest.json
+            --release "${{ inputs.release }}"
+            --json
+          )
+          if [ "${{ inputs.require_version_match }}" = "true" ]; then
+            args+=(--require-version-match)
+          fi
+
+          set +e
+          pnpm --silent beta:release:gate -- "${args[@]}" > evidence/beta-release-gate.json
+          status=$?
+          node -e "JSON.parse(require('node:fs').readFileSync('evidence/beta-release-gate.json', 'utf8'));"
+          cat evidence/beta-release-gate.json
+          exit "$status"
+
+      - name: Upload beta release gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redeemloop-beta-release-gate
+          path: |
+            evidence/beta-release-gate.json
+            evidence/RELEASE_BETA.md
+            evidence/beta-evidence.manifest.json
+          if-no-files-found: warn

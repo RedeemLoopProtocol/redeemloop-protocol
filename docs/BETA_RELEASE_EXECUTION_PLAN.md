@@ -101,6 +101,7 @@ Shopify live support is optional for the first beta. Bitcoin Rune, Fractal, insc
    - Run `pnpm beta:version:prepare -- --release <beta-version>`.
    - Run `pnpm beta:version:prepare -- --release <beta-version> --write`.
    - Run `pnpm beta:release:gate -- --manifest evidence/beta-evidence.manifest.json --release <beta-version> --require-version-match`.
+   - Optionally run **Beta Release Gate Evidence** with the four required evidence workflow run IDs and confirm `beta-release-gate.json` has zero failures.
 
 8. Publish the first public beta.
    - Push the version commit and tag.
@@ -245,6 +246,7 @@ Release gate 现在仍然失败，这是有意设计；只有真实 artifact 就
    - 运行 `pnpm beta:version:prepare -- --release <beta-version>`。
    - 运行 `pnpm beta:version:prepare -- --release <beta-version> --write`。
    - 运行 `pnpm beta:release:gate -- --manifest evidence/beta-evidence.manifest.json --release <beta-version> --require-version-match`。
+   - 可选运行 **Beta Release Gate Evidence**，填入四个必需 evidence workflow run IDs，并确认 `beta-release-gate.json` 没有失败项。
 
 8. 发布首个公开 beta。
    - 推送 version commit 和 tag。
