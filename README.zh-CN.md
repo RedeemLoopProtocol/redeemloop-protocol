@@ -35,10 +35,11 @@ PaymentIntent
 - EVM Live Certification console 和面向商户的钱包错误分类，用于 ETH/BSC/Polygon/Arbitrum pilot run。
 - Merchant Embed Alpha：SDK 方法、React Pay Button、script-tag widget 和 demo store 页面。
 - 文件持久化 sandbox 和商户级 API key 校验，适用于本地和 pilot 环境。
+- 基于 `REDEEMLOOP_DATABASE_URL` 的 Postgres snapshot 持久化，用于 beta 部署加固。
 - 基于 transaction receipt 的可信 EVM ERC-20 settlement recheck。
 - WooCommerce sandbox payment gateway plugin。
-- Webhook event outbox、签名投递、重试状态、dead-letter 状态和 replay API。
-- Phase 0 hardening：EVM vault ownership 签名 challenge、PaymentIntent 过期清理、audit logs 和 webhook drain worker endpoint。
+- Webhook event outbox、独立 worker 进程、签名投递、基于 lease 的 processing 状态、重试状态、dead-letter 状态和 replay API。
+- Phase 0 hardening：EVM vault ownership 签名 challenge、PaymentIntent 过期清理、audit logs 和 webhook worker drain endpoint。
 - Merchant Admin pilot console：支持 vaults、bindings、PaymentIntents、webhooks、delivery records、audit logs 和 pilot seed data。
 - Shopify private-app mark-as-paid alpha：包含配置诊断、mocked Admin API tests 和 GraphQL user-error 处理。
 - Rune production certification track：包含 indexer failover adapter boundary 和 indexer lag manual-review recovery。
@@ -113,15 +114,15 @@ pnpm verify
 pnpm api:dev
 ```
 
-可选 v0.2.2 sandbox 持久化和商户 API key：
+可选托管持久化和商户 API key：
 
 ```bash
-REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json \
+REDEEMLOOP_DATABASE_URL=postgres://redeemloop:redeemloop@localhost:5432/redeemloop \
 REDEEMLOOP_API_KEYS="merchant_cafe:dev-secret" \
 pnpm api:dev
 ```
 
-`REDEEMLOOP_STORAGE_FILE` 会把 merchant、vault、entitlement、binding、PaymentIntent、settlement proof、幂等 key、webhook endpoint、webhook event、webhook delivery record 和 commerce payment record 持久化到本地文件，API 重启后仍可恢复。它是 sandbox persistence adapter，不是生产数据库替代品。
+`REDEEMLOOP_DATABASE_URL` 会启用基于 Postgres snapshot 的持久化，保存 merchant、vault、entitlement、binding、PaymentIntent、settlement proof、幂等 key、webhook endpoint、webhook event、webhook delivery record、public payment session 和 commerce payment record。部署方如果不希望应用启动时自动建表，可以先运行 `services/api/migrations/001_api_snapshots.sql`。`REDEEMLOOP_STORAGE_FILE=.redeemloop/state.json` 仍保留为本地 sandbox fallback。
 `REDEEMLOOP_API_KEYS` 支持逗号分隔的 `merchantId:apiKey`，也支持 JSON object 字符串。配置后，商户级 `/v1` API 调用必须携带 `Authorization: Bearer <apiKey>`。
 
 Public merchant sandbox：
@@ -132,7 +133,27 @@ pnpm env:check
 docker compose up --build
 ```
 
-打开 `http://localhost:3000` 查看控制台，打开 `http://localhost:8787/health` 查看 API health check。
+打开 `http://localhost:3000` 查看控制台，打开 `http://localhost:3002/health` 查看 API health check。
+
+Docker Compose 会同时启动 webhook worker。非 Docker 本地运行时，可在 API 启动后运行：
+
+```bash
+REDEEMLOOP_API_BASE_URL=http://localhost:3002 \
+REDEEMLOOP_WORKER_MERCHANT_ID=merchant_cafe \
+REDEEMLOOP_WORKER_API_KEY=dev-secret \
+pnpm --filter @redeemloop/api worker:dev
+```
+
+Beta readiness evidence：
+
+```bash
+REDEEMLOOP_API_BASE_URL=http://localhost:3002 \
+REDEEMLOOP_MERCHANT_ID=merchant_cafe \
+REDEEMLOOP_API_KEY=dev-secret \
+pnpm beta:check
+```
+
+生产式 gate 使用 `pnpm beta:check:production`。详见 [Beta Readiness Checks](docs/BETA_READINESS.md)。
 
 可信 EVM settlement recheck 可以这样启用：
 
@@ -150,7 +171,7 @@ pnpm api:dev
 pnpm pos:dev
 ```
 
-打开 `http://localhost:3000`，API 保持在 `http://localhost:8787`，然后按顺序运行：
+打开 `http://localhost:3000`，API 保持在 `http://localhost:3002`，然后按顺序运行：
 
 1. Create Asset Binding。
 2. Create PaymentIntent。
@@ -247,6 +268,8 @@ GET  /v1/webhook-events?merchantId=...
 GET  /v1/webhook-events/:eventId
 GET  /v1/webhook-deliveries?merchantId=...
 GET  /v1/webhook-deliveries/:deliveryId
+GET  /v1/diagnostics/webhooks?merchantId=...
+POST /v1/webhook-deliveries/drain-pending
 POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
@@ -286,11 +309,13 @@ X-RedeemLoop-Signature = hex(hmac_sha256(secret, timestamp + "." + nonce + "." +
 ```text
 GET  /v1/webhook-events?merchantId=...
 GET  /v1/webhook-deliveries?merchantId=...
+GET  /v1/diagnostics/webhooks?merchantId=...
+POST /v1/webhook-deliveries/drain-pending
 POST /v1/webhook-deliveries/:deliveryId/attempt
 POST /v1/webhook-deliveries/:deliveryId/replay
 ```
 
-这仍是基于当前 API persistence adapter 的 sandbox 运维层。生产部署应迁移到托管数据库和 worker queue。
+该运维层现在可以使用 Postgres snapshot 持久化，由带 delivery lease 的独立 worker drain，并通过 webhook diagnostics 检查。生产部署在 beta 声明前仍需要外部监控/告警路由，以及真实钱包/电商认证。
 
 旧 v0.1 relayer 路由仅作为兼容测试保留。新集成应使用 v0.2 Asset Binding 和 PaymentIntent API。
 

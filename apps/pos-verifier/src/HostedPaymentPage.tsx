@@ -24,7 +24,7 @@ interface HostedPaymentPageProps {
   lookup: HostedLookup;
 }
 
-const defaultApiBaseUrl = process.env.NEXT_PUBLIC_REDEEMLOOP_API_BASE_URL ?? "http://localhost:8787";
+const defaultApiBaseUrl = process.env.NEXT_PUBLIC_REDEEMLOOP_API_BASE_URL ?? "http://localhost:3002";
 
 export function HostedPaymentPage({ lookup }: HostedPaymentPageProps) {
   const params = useParams();

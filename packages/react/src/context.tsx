@@ -10,7 +10,7 @@ export interface RedeemLoopProviderProps {
   children: ReactNode;
 }
 
-export function RedeemLoopProvider({ client, baseUrl = "http://localhost:8787", apiKey, children }: RedeemLoopProviderProps) {
+export function RedeemLoopProvider({ client, baseUrl = "http://localhost:3002", apiKey, children }: RedeemLoopProviderProps) {
   const resolvedClient = useMemo(() => client ?? new RedeemLoopClient(baseUrl, apiKey), [apiKey, baseUrl, client]);
   return <RedeemLoopClientContext.Provider value={resolvedClient}>{children}</RedeemLoopClientContext.Provider>;
 }

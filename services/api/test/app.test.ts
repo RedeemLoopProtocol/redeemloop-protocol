@@ -484,6 +484,139 @@ describe("RedeemLoop API relayer prototype", () => {
     await app.close();
   });
 
+  it("leases due webhook delivery records so concurrent worker drains do not duplicate attempts", async () => {
+    let releaseSender!: () => void;
+    const senderGate = new Promise<void>((resolve) => {
+      releaseSender = resolve;
+    });
+    let sendCount = 0;
+    const app = await createApp({
+      chainId: 31337,
+      dryRun: true,
+      webhookDeliveryLeaseMs: 60_000,
+      webhookDeliverySender: async () => {
+        sendCount += 1;
+        await senderGate;
+        return { statusCode: 204, body: "ok" };
+      },
+    });
+
+    const bindingId = await createEvmBinding(app, "webhook_lease", "woocommerce", "lease-store");
+    await app.inject({
+      method: "POST",
+      url: "/v1/webhook-endpoints",
+      payload: {
+        id: "wh_lease",
+        merchantId: "coca-cola-japan",
+        url: "https://merchant.example/redeemloop/webhook",
+        secret: "webhook-secret",
+        events: ["payment_intent.paid"],
+      },
+    });
+    const intentResponse = await app.inject({
+      method: "POST",
+      url: "/v1/payment-intents",
+      payload: {
+        bindingId,
+        orderId: "lease-42",
+        channel: "checkout",
+        skuLines: [{ sku: "webhook_lease-sku", quantity: 1 }],
+        payerAddress: user.address,
+      },
+    });
+    const proofResponse = await app.inject({
+      method: "POST",
+      url: "/v1/settlement/proofs",
+      payload: {
+        intentId: intentResponse.json().intentId,
+        txid: "0xlease",
+        confirmations: 3,
+        from: user.address,
+        to: operator,
+        status: "confirmed",
+      },
+    });
+    const deliveryId = proofResponse.json().webhookEvent.deliveryIds[0] as string;
+
+    const firstDrain = app.inject({
+      method: "POST",
+      url: "/v1/webhook-deliveries/drain-pending",
+      payload: {
+        merchantId: "coca-cola-japan",
+        workerId: "worker-a",
+      },
+    });
+    await waitForCondition(() => sendCount === 1);
+
+    const secondDrainResponse = await app.inject({
+      method: "POST",
+      url: "/v1/webhook-deliveries/drain-pending",
+      payload: {
+        merchantId: "coca-cola-japan",
+        workerId: "worker-b",
+      },
+    });
+    expect(secondDrainResponse.statusCode).toBe(200);
+    expect(secondDrainResponse.json()).toMatchObject({ attempted: 0 });
+
+    const processingResponse = await app.inject({
+      method: "GET",
+      url: "/v1/webhook-deliveries?merchantId=coca-cola-japan",
+    });
+    expect(processingResponse.json()[0]).toMatchObject({
+      deliveryId,
+      status: "processing",
+      leaseOwner: "worker-a",
+    });
+
+    releaseSender();
+    const firstDrainResponse = await firstDrain;
+    expect(firstDrainResponse.statusCode).toBe(200);
+    expect(firstDrainResponse.json()).toMatchObject({
+      attempted: 1,
+      delivered: 1,
+      deliveries: [
+        {
+          deliveryId,
+          status: "delivered",
+          attempts: 1,
+        },
+      ],
+    });
+    expect(sendCount).toBe(1);
+
+    const diagnosticsResponse = await app.inject({
+      method: "GET",
+      url: "/v1/diagnostics/webhooks?merchantId=coca-cola-japan",
+    });
+    expect(diagnosticsResponse.statusCode).toBe(200);
+    expect(diagnosticsResponse.json()).toMatchObject({
+      merchantId: "coca-cola-japan",
+      deliveries: {
+        delivered: 1,
+        failed: 0,
+        deadLetter: 0,
+        staleProcessing: 0,
+      },
+      worker: {
+        noRecentDrain: false,
+      },
+      recommendedActions: ["No immediate webhook delivery action required."],
+    });
+    expect(diagnosticsResponse.json().worker.recentDrains).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workerId: "worker-a",
+          merchantId: "coca-cola-japan",
+          attempted: 1,
+          delivered: 1,
+        }),
+      ]),
+    );
+
+    await app.close();
+  });
+
   it("enforces configured and merchant-verified embed origins", async () => {
     const app = await createApp({
       chainId: 31337,
@@ -2060,6 +2193,61 @@ describe("RedeemLoop API relayer prototype", () => {
 
     await app.close();
   });
+
+  it("reports CORS and rate-limit diagnostics in runtime config", async () => {
+    const app = await createApp({
+      chainId: 31337,
+      dryRun: true,
+      embedAllowedOrigins: ["https://shop.example"],
+      rateLimitMax: 20,
+      rateLimitWindowMs: 30_000,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/config",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      cors: {
+        allowedOrigins: ["https://shop.example"],
+        wildcardAllowed: false,
+      },
+      rateLimit: {
+        enabled: true,
+        max: 20,
+        windowMs: 30_000,
+      },
+    });
+
+    await app.close();
+  });
+
+  it("rate-limits excessive v1 requests with retry headers", async () => {
+    const app = await createApp({
+      chainId: 31337,
+      dryRun: true,
+      rateLimitMax: 2,
+      rateLimitWindowMs: 60_000,
+    });
+
+    const first = await app.inject({ method: "GET", url: "/v1/config" });
+    const second = await app.inject({ method: "GET", url: "/v1/config" });
+    const third = await app.inject({ method: "GET", url: "/v1/config" });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["x-ratelimit-limit"]).toBe("2");
+    expect(second.statusCode).toBe(200);
+    expect(second.headers["x-ratelimit-remaining"]).toBe("0");
+    expect(third.statusCode).toBe(429);
+    expect(third.headers["retry-after"]).toBeDefined();
+    expect(third.json()).toMatchObject({
+      error: "Rate limit exceeded",
+    });
+
+    await app.close();
+  });
 });
 
 async function registerTerminal(app: Awaited<ReturnType<typeof createApp>>) {
@@ -2240,6 +2428,15 @@ async function createEvmBinding(
   });
   expect(response.statusCode).toBe(201);
   return bindingId;
+}
+
+async function waitForCondition(check: () => boolean, timeoutMs = 1_000): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Timed out waiting for condition");
 }
 
 function commercePayload(overrides: Record<string, unknown> = {}) {

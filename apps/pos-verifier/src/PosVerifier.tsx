@@ -47,7 +47,7 @@ interface FormState {
 }
 
 const initialForm: FormState = {
-  apiBaseUrl: "http://localhost:8787",
+  apiBaseUrl: "http://localhost:3002",
   merchantId: "merchant_cafe",
   merchantName: "Merchant Cafe",
   chainId: "31337",

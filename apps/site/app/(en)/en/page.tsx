@@ -5,7 +5,7 @@ import { OfficialSite } from "../../../src/OfficialSite";
 export const metadata: Metadata = {
   title: "RedeemLoop Protocol",
   description:
-    "Open-source, non-issuing voucher payment protocol for Asset Binding, PaymentIntent, receipt confirmation, and commerce mark-as-paid.",
+    "Official website for RedeemLoop, the open-source voucher payment infrastructure for merchant-owned digital assets.",
 };
 
 export default function EnglishHome() {

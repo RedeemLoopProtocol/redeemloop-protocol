@@ -21,6 +21,8 @@ import type {
   EvmRpcDiagnosticsResponse,
   ExpireStalePaymentIntentsInput,
   ExpireStalePaymentIntentsResponse,
+  WebhookDiagnosticsInput,
+  WebhookDiagnosticsResponse,
   ListAuditLogsInput,
   ListBindingsInput,
   ListPaymentIntentsInput,
@@ -311,6 +313,10 @@ export class RedeemLoopClient {
 
   async getShopifyDiagnostics(): Promise<ShopifyDiagnosticsResponse> {
     return this.request("/v1/diagnostics/shopify");
+  }
+
+  async getWebhookDiagnostics(input: WebhookDiagnosticsInput = {}): Promise<WebhookDiagnosticsResponse> {
+    return this.request(this.withQuery("/v1/diagnostics/webhooks", input));
   }
 
   async createWebhookEndpoint(input: CreateWebhookEndpointInput): Promise<WebhookEndpoint> {

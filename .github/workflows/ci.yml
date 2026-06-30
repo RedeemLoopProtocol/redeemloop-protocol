@@ -47,5 +47,10 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Beta release tooling smoke
+        run: |
+          node --check scripts/beta-release-gate.mjs
+          pnpm --silent beta:release:gate -- --help
+
       - name: Audit
         run: pnpm audit --audit-level moderate

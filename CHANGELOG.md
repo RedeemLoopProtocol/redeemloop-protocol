@@ -2,7 +2,77 @@
 
 ## Unreleased
 
-No unreleased changes yet.
+### Changed
+
+- Added snapshot-backed Postgres persistence for the API through `REDEEMLOOP_DATABASE_URL`.
+- Added the `redeemloop_api_snapshots` migration and Docker Compose Postgres service without exposing a host database port.
+- Updated environment validation so production accepts managed Postgres persistence and warns when file storage is used as a fallback.
+- Added a standalone webhook worker process for draining due delivery records through the API.
+- Added webhook delivery lease fields and `processing` status so concurrent workers do not duplicate due delivery attempts.
+- Added outbound webhook request timeout configuration and worker settings to the sandbox environment and Docker Compose path.
+- Added webhook operations diagnostics for delivery status counts, stale `processing` leases, worker drain heartbeat, and recommended actions.
+- Added Merchant Admin visibility for webhook diagnostics.
+- Added `pnpm beta:check` and `pnpm beta:check:production` to collect API, persistence, worker, EVM RPC, and Shopify readiness evidence before beta release.
+- Added `pnpm beta:smoke:compose` to run the Docker Compose API/Postgres/worker/console smoke path on Docker-enabled machines.
+- Added `pnpm beta:evidence:check` and a beta evidence manifest example for validating external certification artifacts before release.
+- Added `pnpm beta:evidence:init` to create a local, Git-ignored beta evidence scaffold with intentionally failing placeholders.
+- Added `pnpm beta:evidence:evm` to generate funded EVM wallet certification evidence from read-only RPC receipt checks.
+- Added `pnpm beta:evidence:commerce` to generate WooCommerce/Shopify mark-as-paid certification evidence from RedeemLoop API results.
+- Tightened commerce beta evidence validation so dry-run artifacts cannot pass production beta certification.
+- Added `pnpm beta:evidence:summary` to generate public-safe bilingual beta release evidence notes from validated artifacts.
+- Added `pnpm beta:release:gate` for the final beta release gate across evidence, bilingual release notes, README links, CI/Pages workflow presence, and workspace version consistency.
+- Tightened `pnpm beta:release:gate` so public release notes fail on obvious API key, webhook secret, token, private-key, WooCommerce secret, or GitHub token leaks.
+- Updated `pnpm beta:evidence:summary` to avoid writing absolute local filesystem paths into public release notes.
+- Moved pnpm security overrides from the deprecated root `package.json` `pnpm` field to `pnpm-workspace.yaml`.
+- Added a beta release gate check for active pnpm workspace overrides.
+- Added a beta release gate frozen lockfile check so package/lockfile drift is caught before publication.
+- Added default `/v1` API rate limiting with runtime diagnostics and 429 retry headers.
+- Tightened production CORS/rate-limit readiness checks and environment validation.
+- Made `pnpm beta:smoke:compose -- --json` safe for direct JSON evidence capture.
+- Added a manual GitHub Actions workflow for Docker Compose smoke evidence generation.
+- Tightened `pnpm beta:release:gate` so the beta compose-smoke evidence workflow must be present and artifact-producing before release.
+- Added `pnpm beta:version:prepare` to dry-run or apply a consistent workspace package version before the strict beta release gate.
+- Added bilingual beta readiness guide at `docs/BETA_READINESS.md`.
+- Reworked the official website from a construction/status page into a merchant-facing product homepage.
+- Replaced the hero copy with formal voucher payment positioning and moved pilot limitations below the product story.
+- Added merchant onboarding, use-case, integration, developer, and pilot-readiness sections for the public site.
+- Switched the Next app build scripts to webpack mode and removed remaining Google Fonts runtime fetches from the POS console so restricted environments can build offline.
+
+### 中文说明
+
+- 新增基于 `REDEEMLOOP_DATABASE_URL` 的 API Postgres snapshot 持久化。
+- 新增 `redeemloop_api_snapshots` migration，并在 Docker Compose 中加入 Postgres 服务；不向宿主机暴露数据库端口。
+- 更新环境检查：生产模式支持托管 Postgres 持久化；仅使用文件存储时给出 fallback 警告。
+- 新增独立 webhook worker 进程，通过 API drain 到期 delivery record。
+- 新增 webhook delivery lease 字段和 `processing` 状态，避免多个 worker 重复投递同一条到期 delivery。
+- 新增出站 webhook 请求超时配置，并把 worker 变量接入 sandbox 环境和 Docker Compose 路径。
+- 新增 webhook 运维诊断，覆盖 delivery 状态统计、stale `processing` lease、worker drain heartbeat 和 recommended actions。
+- Merchant Admin 新增 webhook diagnostics 可见性。
+- 新增 `pnpm beta:check` 和 `pnpm beta:check:production`，用于在 beta 发布前采集 API、persistence、worker、EVM RPC 和 Shopify readiness evidence。
+- 新增 `pnpm beta:smoke:compose`，用于在有 Docker 的机器上运行 API/Postgres/worker/console Docker Compose smoke 路径。
+- 新增 `pnpm beta:evidence:check` 和 beta evidence manifest 示例，用于发布前校验外部 certification artifacts。
+- 新增 `pnpm beta:evidence:init`，用于生成本地、被 Git 忽略、且默认无法通过的 beta evidence scaffold。
+- 新增 `pnpm beta:evidence:evm`，用于通过只读 RPC receipt check 生成 funded EVM wallet certification evidence。
+- 新增 `pnpm beta:evidence:commerce`，用于根据 RedeemLoop API 结果生成 WooCommerce/Shopify mark-as-paid certification evidence。
+- 收紧 commerce beta evidence validation，dry-run artifact 不能通过 production beta certification。
+- 新增 `pnpm beta:evidence:summary`，用于根据已校验 artifact 生成适合公开发布的双语 beta release evidence notes。
+- 新增 `pnpm beta:release:gate`，用于在 beta 发布前统一检查 evidence、双语 release notes、README 链接、CI/Pages workflow 和 workspace version 一致性。
+- 收紧 `pnpm beta:release:gate`：公开 release notes 中出现明显 API key、webhook secret、token、私钥、WooCommerce secret 或 GitHub token 时会失败。
+- 更新 `pnpm beta:evidence:summary`，避免把本机绝对文件路径写入公开 release notes。
+- 将 pnpm security overrides 从 root `package.json` 中已废弃的 `pnpm` 字段迁移到 `pnpm-workspace.yaml`。
+- 新增 beta release gate 检查，确认 pnpm workspace overrides 处于有效配置位置。
+- 新增 beta release gate 的 frozen lockfile 检查，在发布前发现 package/lockfile 漂移。
+- 新增默认 `/v1` API rate limiting，包含 runtime diagnostics 和 429 retry headers。
+- 收紧 production CORS/rate-limit readiness checks 和环境验证。
+- 让 `pnpm beta:smoke:compose -- --json` 可以安全地直接重定向为 JSON evidence。
+- 新增用于生成 Docker Compose smoke evidence 的手动 GitHub Actions workflow。
+- 收紧 `pnpm beta:release:gate`：发布前必须存在可生成 artifact 的 beta compose-smoke evidence workflow。
+- 新增 `pnpm beta:version:prepare`，用于在 strict beta release gate 前 dry-run 或写入一致的 workspace package version。
+- 新增双语 beta readiness 指南：`docs/BETA_READINESS.md`。
+- 将官网从施工说明/工程状态页升级为面向商户的正式产品官网首页。
+- 重写首屏价值主张，把 pilot 限制下沉到产品叙事之后。
+- 新增商户接入、应用场景、集成、开发者和 pilot 状态区块。
+- Next app 构建脚本切换到 webpack，并移除 POS console 剩余 Google Fonts 远程字体依赖，便于受限环境离线构建。
 
 ## v0.9.3 - 2026-06-18
 

@@ -1,6 +1,20 @@
 name: redeemloop-sandbox
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: redeemloop
+      POSTGRES_USER: redeemloop
+      POSTGRES_PASSWORD: redeemloop
+    volumes:
+      - redeemloop-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U redeemloop -d redeemloop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   api:
     build:
       context: .
@@ -8,17 +22,36 @@ services:
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
-      PORT: 8787
-      REDEEMLOOP_STORAGE_FILE: /data/state.json
+      PORT: 3002
+      REDEEMLOOP_DATABASE_URL: postgres://redeemloop:redeemloop@postgres:5432/redeemloop
       REDEEMLOOP_API_KEYS: '{"merchant_cafe":"dev-secret"}'
       REDEEMLOOP_EMBED_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
       EVM_MIN_CONFIRMATIONS: 1
       WEBHOOK_MAX_ATTEMPTS: 5
+      WEBHOOK_DELIVERY_LEASE_MS: 60000
+      WEBHOOK_REQUEST_TIMEOUT_MS: 15000
       RELAYER_DRY_RUN: "true"
     ports:
-      - "8787:8787"
-    volumes:
-      - redeemloop-state:/data
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+    command: pnpm --filter @redeemloop/api worker
+    environment:
+      NODE_ENV: production
+      REDEEMLOOP_API_BASE_URL: http://api:3002
+      REDEEMLOOP_WORKER_MERCHANT_ID: merchant_cafe
+      REDEEMLOOP_WORKER_API_KEY: dev-secret
+      REDEEMLOOP_WORKER_INTERVAL_MS: 5000
+      REDEEMLOOP_WORKER_BATCH_SIZE: 25
+      WEBHOOK_DELIVERY_LEASE_MS: 60000
+      REDEEMLOOP_WORKER_REQUEST_TIMEOUT_MS: 20000
+    depends_on:
+      - api
 
   console:
     build:
@@ -27,11 +60,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      NEXT_PUBLIC_REDEEMLOOP_API_BASE_URL: http://localhost:8787
+      NEXT_PUBLIC_REDEEMLOOP_API_BASE_URL: http://localhost:3002
     ports:
       - "3000:3000"
     depends_on:
       - api
 
 volumes:
-  redeemloop-state:
+  redeemloop-postgres:

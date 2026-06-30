@@ -16,6 +16,16 @@
     "verify": "pnpm lint && pnpm test && pnpm build",
     "env:check": "node scripts/validate-env.mjs",
     "env:check:production": "node scripts/validate-env.mjs --production",
+    "beta:check": "node scripts/beta-readiness.mjs",
+    "beta:check:production": "node scripts/beta-readiness.mjs --production --require-evm-rpc",
+    "beta:smoke:compose": "node scripts/compose-smoke.mjs",
+    "beta:evidence:init": "node scripts/init-beta-evidence.mjs",
+    "beta:evidence:evm": "node scripts/create-evm-certification-evidence.mjs",
+    "beta:evidence:commerce": "node scripts/create-commerce-certification-evidence.mjs",
+    "beta:evidence:check": "node scripts/check-beta-evidence.mjs",
+    "beta:evidence:summary": "node scripts/create-beta-release-summary.mjs",
+    "beta:release:gate": "node scripts/beta-release-gate.mjs",
+    "beta:version:prepare": "node scripts/prepare-beta-version.mjs",
     "sandbox:up": "docker compose up --build",
     "contracts:build": "cd packages/contracts && forge build",
     "contracts:test": "cd packages/contracts && forge test",
@@ -25,11 +35,5 @@
     "pos:dev": "pnpm --filter @redeemloop/pos-verifier dev",
     "site:dev": "pnpm --filter @redeemloop/site dev",
     "site:build": "pnpm --filter @redeemloop/site build"
-  },
-  "pnpm": {
-    "overrides": {
-      "postcss": "8.5.15",
-      "ws": "8.21.0"
-    }
   }
 }

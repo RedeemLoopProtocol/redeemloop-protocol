@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "release": "v0.10.x-beta",
+  "checkedAt": "2026-06-30T00:00:00.000Z",
+  "artifacts": {
+    "composeSmoke": {
+      "path": "evidence/compose-smoke.json",
+      "required": true,
+      "type": "compose-smoke"
+    },
+    "productionReadiness": {
+      "path": "evidence/beta-readiness-production.json",
+      "required": true,
+      "type": "beta-readiness"
+    },
+    "evmWalletCertification": {
+      "path": "evidence/evm-wallet-certification.json",
+      "required": true,
+      "type": "evm-certification"
+    },
+    "woocommerceCertification": {
+      "path": "evidence/woocommerce-certification.json",
+      "required": true,
+      "type": "commerce-certification"
+    },
+    "shopifyCertification": {
+      "path": "evidence/shopify-certification.json",
+      "required": false,
+      "type": "commerce-certification"
+    },
+    "releaseNotes": {
+      "path": "docs/RELEASE_BETA.md",
+      "required": true,
+      "type": "markdown"
+    }
+  }
+}

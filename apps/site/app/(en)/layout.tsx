@@ -5,11 +5,11 @@ import "../globals.css";
 export const metadata: Metadata = {
   title: "RedeemLoop Protocol",
   description:
-    "Open-source, non-issuing voucher payment protocol for Asset Binding, PaymentIntent, receipt confirmation, and commerce mark-as-paid.",
+    "Official website for RedeemLoop, the open-source voucher payment infrastructure for merchant-owned digital assets.",
   openGraph: {
     title: "RedeemLoop Protocol",
     description:
-      "A non-issuing voucher payment gateway for merchant-owned FT, NFT, Rune, and Inscription assets.",
+      "Accept merchant-owned digital vouchers as payment, confirm receipt, and mark commerce orders paid.",
     type: "website",
   },
 };

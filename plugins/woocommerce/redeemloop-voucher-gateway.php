@@ -40,7 +40,7 @@ function redeemloop_voucher_gateway_init() {
             $this->title = $this->get_option('title', 'RedeemLoop Voucher');
             $this->description = $this->get_option('description', 'Pay with a supported voucher asset.');
             $this->enabled = $this->get_option('enabled', 'no');
-            $this->api_base_url = untrailingslashit($this->get_option('api_base_url', 'http://localhost:8787'));
+            $this->api_base_url = untrailingslashit($this->get_option('api_base_url', 'http://localhost:3002'));
             $this->merchant_id = $this->get_option('merchant_id', '');
             $this->api_key = $this->get_option('api_key', '');
             $this->default_binding_id = $this->get_option('default_binding_id', '');
@@ -73,7 +73,7 @@ function redeemloop_voucher_gateway_init() {
                 'api_base_url' => array(
                     'title' => __('RedeemLoop API Base URL', 'redeemloop'),
                     'type' => 'text',
-                    'default' => 'http://localhost:8787',
+                    'default' => 'http://localhost:3002',
                 ),
                 'merchant_id' => array(
                     'title' => __('Merchant ID', 'redeemloop'),
@@ -137,7 +137,7 @@ function redeemloop_voucher_gateway_init() {
             $url = untrailingslashit(trim((string) $value));
             if (!$url || !filter_var($url, FILTER_VALIDATE_URL)) {
                 $this->add_error(__('RedeemLoop API Base URL must be a valid URL.', 'redeemloop'));
-                return $this->api_base_url ?: 'http://localhost:8787';
+                return $this->api_base_url ?: 'http://localhost:3002';
             }
             return esc_url_raw($url);
         }

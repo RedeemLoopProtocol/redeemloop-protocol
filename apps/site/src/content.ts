@@ -1,63 +1,100 @@
 export type Locale = "en" | "zh";
 
-export type ScenarioId = "checkout" | "pos" | "live" | "ops";
+export type Localized<T = string> = Record<Locale, T>;
 
-export type Scenario = {
-  id: ScenarioId;
-  status: Record<Locale, string>;
-  title: Record<Locale, string>;
-  summary: Record<Locale, string>;
-  merchant: Record<Locale, string>;
-  customer: Record<Locale, string>;
-  result: Record<Locale, string>;
-  steps: Record<Locale, string[]>;
+export type UseCaseId = "checkout" | "pos" | "live" | "ops";
+
+export type UseCase = {
+  id: UseCaseId;
+  status: Localized;
+  title: Localized;
+  summary: Localized;
+  merchant: Localized;
+  customer: Localized;
+  result: Localized;
+  steps: Localized<string[]>;
   metrics: Array<{
-    label: Record<Locale, string>;
+    label: Localized;
     value: string;
   }>;
+};
+
+export type IntegrationRail = {
+  rail: string;
+  status: Localized;
+  scope: Localized;
+  next: Localized;
 };
 
 export const siteCopy = {
   en: {
     nav: {
       home: "Home",
-      scenarios: "Product",
-      status: "Solutions",
-      docs: "Developers",
-      releases: "About",
+      product: "Product",
+      useCases: "Use cases",
+      integrations: "Integrations",
+      developers: "Developers",
+      status: "Status",
       github: "GitHub",
       language: "ZH",
       languageAria: "Open Chinese version",
     },
     hero: {
-      eyebrow: "Open, trusted, sustainable voucher payment protocol",
-      title: "Make every voucher more valuable",
+      eyebrow: "Voucher payment infrastructure for merchant-owned assets",
+      title: "Accept digital vouchers as payment, then mark the order paid.",
       body:
-        "RedeemLoop keeps the VI promise narrow: existing voucher assets, transparent circulation, receipt confirmation, and commerce mark-as-paid.",
-      primary: "Explore product",
-      secondary: "Understand protocol",
-      alpha:
-        "Current release is alpha/pilot infrastructure. EVM checkout is implemented at integration level; Rune, Fractal, and inscription flows still require live certification.",
+        "RedeemLoop gives merchants a narrow payment loop for existing FT, NFT, Rune, and inscription voucher assets: bind the asset, collect it into a merchant vault, verify receipt, and notify commerce.",
+      primary: "Explore merchant flows",
+      secondary: "Read integration guide",
+      proofBadge: "Non-issuing protocol",
+      proofBody:
+        "RedeemLoop does not mint assets, custody keys, price tokens, or replace inventory and fulfillment systems.",
     },
-    console: {
-      title: "Scenario model",
-      intent: "PaymentIntent",
-      settlement: "Receipt confirmation",
-      commerce: "Commerce mark-as-paid",
-      merchant: "Merchant side",
-      customer: "Customer side",
-      result: "Result",
-      chain: "Asset path",
-    },
-    protocol: {
-      title: "The loop stays narrow",
+    heroStats: [
+      { value: "4", label: "EVM networks in beta" },
+      { value: "2", label: "commerce adapters" },
+      { value: "1", label: "PaymentIntent ledger" },
+    ],
+    trustMarkers: [
+      "Merchant-owned voucher assets",
+      "Merchant vault receipt confirmation",
+      "Commerce mark-as-paid callback",
+    ],
+    product: {
+      kicker: "Product",
+      title: "A payment loop built for voucher commerce",
       body:
-        "RedeemLoop is deliberately scoped around existing voucher assets and commerce payment status. It does not issue assets, custody funds, price tokens, or replace logistics.",
+        "The homepage should explain the buying flow first. RedeemLoop sits between a store, a wallet, and a commerce backend, then records one PaymentIntent from checkout to paid status.",
     },
-    status: {
-      title: "Readiness status",
+    productSteps: [
+      {
+        title: "Bind the voucher asset",
+        body: "Map a SKU or entitlement to the merchant-owned voucher asset and receiving vault.",
+      },
+      {
+        title: "Open a payment entry",
+        body: "Use a checkout button, hosted URL, POS QR code, or livestream short link.",
+      },
+      {
+        title: "Confirm merchant receipt",
+        body: "Verify the transfer through an EVM receipt or adapter-backed proof path.",
+      },
+      {
+        title: "Close the order loop",
+        body: "Send a signed webhook or commerce adapter call that marks the order paid.",
+      },
+    ],
+    useCases: {
+      kicker: "Use cases",
+      title: "One payment model for web, store, and livestream commerce",
       body:
-        "Public wording separates implemented integration support from live certification evidence.",
+        "Each channel uses the same PaymentIntent record, so support, reconciliation, and audit trails stay consistent. The section also includes 100 hypothetical brand simulations across 10 industries.",
+    },
+    integrations: {
+      kicker: "Integrations",
+      title: "Start with EVM checkout, then expand by adapter",
+      body:
+        "RedeemLoop keeps the public status clear: implemented integration support is separated from live certification evidence.",
       columns: {
         rail: "Rail",
         status: "Status",
@@ -65,81 +102,129 @@ export const siteCopy = {
         next: "Next proof",
       },
     },
-    visual: {
-      title: "Brand system",
+    onboarding: {
+      kicker: "Merchant path",
+      title: "What a pilot merchant needs to connect",
       body:
-        "The public site uses the original transparent RedeemLoop mark, the exact VI palette, and clean commerce scenes without mixing languages.",
-      cards: ["Transparent SVG mark", "Voucher checkout", "POS QR", "Merchant operations"],
+        "A pilot can begin without changing asset issuance, pricing, inventory, or fulfillment. RedeemLoop only needs the asset binding, receiving vault, commerce order reference, and webhook target.",
     },
+    onboardingSteps: [
+      "Choose the voucher asset and supported chain.",
+      "Register the merchant vault that receives payment.",
+      "Bind SKUs or entitlements to the voucher requirement.",
+      "Embed a checkout, POS, or short-link entry point.",
+      "Verify receipt and let RedeemLoop mark the order paid.",
+    ],
     developer: {
-      title: "Developer entry",
+      kicker: "Developers",
+      title: "Integrate against the same local sandbox used by the public demo",
       body:
-        "Start with the local sandbox, then choose a web checkout, POS QR, or short-link path. The same PaymentIntent record reconciles payment, settlement proof, webhook delivery, and commerce status.",
-      codeLabel: "Local sandbox",
+        "The developer path is still one command-line workspace, but it now sits below the product story instead of defining the homepage.",
+      codeLabel: "Local commands",
+      docs: "Open docs",
+      api: "API reference",
     },
-    boundary: {
-      title: "Protocol boundary",
-      does: "Does",
-      doesNot: "Does not",
-      doesItems: [
-        "Bind merchant-owned voucher assets to SKUs and entitlements.",
-        "Create checkout buttons, POS QR links, hosted pages, and livestream short links.",
-        "Verify receipt through chain events or indexers.",
-        "Notify WooCommerce, Shopify, or custom systems that the order is paid.",
-      ],
-      doesNotItems: [
-        "Issue tokens, mint NFTs, etch Runes, or inscribe Ordinals.",
-        "Custody private keys or merchant assets.",
-        "Design tokenomics, token pricing, or secondary markets.",
-        "Replace inventory, logistics, tax, or after-sales systems.",
-      ],
+    status: {
+      kicker: "Pilot readiness",
+      title: "Production claims stay conservative",
+      body:
+        "The official site can be polished without overstating support. Live wallet, store, and indexer certification remains the gate for production-ready language.",
     },
     footer: {
-      line: "RedeemLoop is published as open-source infrastructure for voucher payment pilots.",
+      line: "RedeemLoop is open-source voucher payment infrastructure for merchant pilots.",
       domain:
-        "Recommended public domain: redeemloop.aifund.com. Keep pay.aifund.com for production payment entry after live wallet and HTTPS certification.",
+        "Recommended public domain: redeemloop.aifund.com. Keep pay.aifund.com for certified payment entry after live wallet and HTTPS checks.",
+      explore: "Core paths",
+      product: "Product",
+      resources: "Resources",
+      legal: "Protocol boundary",
+      primaryLinks: [
+        {
+          label: "Product",
+          href: "#product",
+          body: "Asset binding, PaymentIntent, receipt confirmation, and mark-as-paid in one loop.",
+        },
+        {
+          label: "Use cases",
+          href: "#use-cases",
+          body: "Checkout, POS QR, livestream links, merchant operations, and 100 brand simulations share one loop.",
+        },
+        {
+          label: "Integrations",
+          href: "#integrations",
+          body: "EVM beta plus WooCommerce, Shopify, Rune, and inscription adapter tracks.",
+        },
+      ],
     },
   },
   zh: {
     nav: {
       home: "首页",
-      scenarios: "商品",
-      status: "解决方案",
-      docs: "开发者",
-      releases: "关于我们",
+      product: "产品",
+      useCases: "场景",
+      integrations: "集成",
+      developers: "开发者",
+      status: "状态",
       github: "GitHub",
       language: "EN",
       languageAria: "打开英文版本",
     },
     hero: {
-      eyebrow: "开放、可信、可持续的提货券协议",
-      title: "让每一张提货券 更有价值",
+      eyebrow: "面向商户自有资产的提货券支付基础设施",
+      title: "让数字提货券可以收款，并自动标记订单已支付。",
       body:
-        "RedeemLoop 保持 VI 里的克制承诺：已有提货资产、透明流通、收券确认和电商订单 mark-as-paid。",
-      primary: "探索商品",
-      secondary: "了解协议",
-      alpha:
-        "当前版本仍是 alpha/pilot 基础设施。EVM checkout 已具备集成层支持；Rune、Fractal、Inscription 仍需要真实钱包和索引器认证。",
+        "RedeemLoop 为商户已有的 FT、NFT、Rune 和铭文提货资产提供克制的支付闭环：绑定资产、收进商户 vault、确认收券，再通知电商系统完成付款状态。",
+      primary: "查看商户场景",
+      secondary: "阅读集成指南",
+      proofBadge: "非发行型协议",
+      proofBody:
+        "RedeemLoop 不发行资产、不托管私钥、不做 token 定价，也不替代库存、履约和售后系统。",
     },
-    console: {
-      title: "应用场景模型",
-      intent: "PaymentIntent",
-      settlement: "收券确认",
-      commerce: "电商 mark-as-paid",
-      merchant: "商户侧",
-      customer: "用户侧",
-      result: "结果",
-      chain: "资产路径",
-    },
-    protocol: {
-      title: "协议边界保持克制",
+    heroStats: [
+      { value: "4", label: "EVM 网络 beta" },
+      { value: "2", label: "电商适配方向" },
+      { value: "1", label: "统一 PaymentIntent" },
+    ],
+    trustMarkers: [
+      "商户自有提货资产",
+      "商户 vault 收券确认",
+      "电商 mark-as-paid 回调",
+    ],
+    product: {
+      kicker: "产品",
+      title: "为提货券电商设计的支付闭环",
       body:
-        "RedeemLoop 围绕已有提货资产和电商付款状态工作，不发行资产、不托管资金、不做 token 定价，也不替代物流。",
+        "正式官网需要先讲清购买流程。RedeemLoop 位于店铺、钱包和电商后台之间，用同一条 PaymentIntent 记录串起 checkout、收券确认和订单已付款。",
     },
-    status: {
-      title: "可用度状态",
+    productSteps: [
+      {
+        title: "绑定提货资产",
+        body: "把 SKU 或权益映射到商户自有的提货资产和收券 vault。",
+      },
+      {
+        title: "打开支付入口",
+        body: "使用商品页按钮、hosted URL、POS QR 或直播短链进入支付。",
+      },
+      {
+        title: "确认商户收券",
+        body: "通过 EVM receipt 或 adapter proof 路径确认资产已进入商户 vault。",
+      },
+      {
+        title: "关闭订单闭环",
+        body: "发送签名 webhook 或电商适配调用，把订单标记为已付款。",
+      },
+    ],
+    useCases: {
+      kicker: "应用场景",
+      title: "网页、门店、直播都使用同一套付款模型",
       body:
-        "公开表述会区分已经实现的集成能力和仍需真实认证的生产证据。",
+        "不同销售渠道共用同一个 PaymentIntent 记录，方便支持、对账和审计追踪。下方同时按 10 个行业放入 100 个品牌仿真案例。",
+    },
+    integrations: {
+      kicker: "集成",
+      title: "从 EVM checkout 开始，再按 adapter 扩展",
+      body:
+        "官网可以更正式，但公开状态必须清楚区分已经实现的集成能力和仍需真实认证的生产证据。",
       columns: {
         rail: "路径",
         status: "状态",
@@ -147,44 +232,64 @@ export const siteCopy = {
         next: "下一步证明",
       },
     },
-    visual: {
-      title: "视觉识别应用",
+    onboarding: {
+      kicker: "商户接入路径",
+      title: "一个 pilot 商户需要准备什么",
       body:
-        "官网沿用你提供的 RedeemLoop VI 原图、透明 SVG 标识和原始色板，不重绘、不改色。",
-      cards: ["透明 SVG 标识", "提货券支付", "POS 二维码", "商户运营"],
+        "接入不要求改变资产发行、定价、库存或履约。RedeemLoop 只需要资产绑定、收券 vault、电商订单引用和 webhook 目标。",
     },
+    onboardingSteps: [
+      "选择提货资产和支持的链。",
+      "登记用于收款的商户 vault。",
+      "把 SKU 或权益绑定到提货券要求。",
+      "嵌入 checkout、POS 或短链支付入口。",
+      "确认收券后由 RedeemLoop 标记订单已付款。",
+    ],
     developer: {
-      title: "开发者入口",
+      kicker: "开发者",
+      title: "从公开 demo 使用的同一套本地 sandbox 开始",
       body:
-        "先跑本地 sandbox，再选择网页 checkout、POS QR 或直播短链。同一个 PaymentIntent 记录会统一串起付款、settlement proof、webhook delivery 和电商状态。",
-      codeLabel: "本地 sandbox",
+        "开发者入口仍然保留命令行 workspace，但它应该位于产品叙事之后，而不是定义首页主视觉。",
+      codeLabel: "本地命令",
+      docs: "打开文档",
+      api: "API 参考",
     },
-    boundary: {
-      title: "协议边界",
-      does: "RedeemLoop 做",
-      doesNot: "RedeemLoop 不做",
-      doesItems: [
-        "把商户自有提货资产绑定到 SKU 和权益。",
-        "生成 checkout button、POS QR、hosted page 和直播短链。",
-        "通过链上事件或索引器确认商户已经收券。",
-        "通知 WooCommerce、Shopify 或自定义系统订单已付款。",
-      ],
-      doesNotItems: [
-        "不发行 token、不 mint NFT、不 etch Rune、不 inscribe Ordinal。",
-        "不托管私钥或商户资产。",
-        "不设计 tokenomics、token 定价或二级市场。",
-        "不替代库存、物流、税务或售后系统。",
-      ],
+    status: {
+      kicker: "Pilot 状态",
+      title: "生产级表述保持克制",
+      body:
+        "官网可以正式，但不能夸大支持范围。真实钱包、真实店铺和真实索引器认证仍然是 production-ready 表述的前置条件。",
     },
     footer: {
-      line: "RedeemLoop 作为面向提货券支付 pilot 的开源基础设施发布。",
+      line: "RedeemLoop 是面向商户 pilot 的开源提货券支付基础设施。",
       domain:
-        "建议官网域名使用 redeemloop.aifund.com；pay.aifund.com 保留给通过真实钱包和 HTTPS 认证后的支付入口。",
+        "建议官网域名使用 redeemloop.aifund.com；pay.aifund.com 保留给完成真实钱包和 HTTPS 检查后的认证支付入口。",
+      explore: "核心入口",
+      product: "产品",
+      resources: "资源",
+      legal: "协议边界",
+      primaryLinks: [
+        {
+          label: "产品",
+          href: "#product",
+          body: "资产绑定、PaymentIntent、收券确认和订单已付款组成同一条闭环。",
+        },
+        {
+          label: "场景",
+          href: "#use-cases",
+          body: "商品页、POS QR、直播短链、商户运营和 100 个品牌仿真共用同一条闭环。",
+        },
+        {
+          label: "集成",
+          href: "#integrations",
+          body: "EVM beta 起步，并标注 WooCommerce、Shopify、Rune 和铭文 adapter 状态。",
+        },
+      ],
     },
   },
 } as const;
 
-export const scenarios: Scenario[] = [
+export const useCases: UseCase[] = [
   {
     id: "checkout",
     status: {
@@ -192,28 +297,28 @@ export const scenarios: Scenario[] = [
       zh: "EVM beta",
     },
     title: {
-      en: "Product checkout button",
-      zh: "商品页支付按钮",
+      en: "Product checkout",
+      zh: "商品页 checkout",
     },
     summary: {
-      en: "A merchant embeds the React Pay Button or script widget beside a product SKU.",
-      zh: "商户把 React Pay Button 或 script widget 嵌入到商品 SKU 旁边。",
+      en: "Add a voucher tender button beside a SKU and let the wallet send the required asset.",
+      zh: "在商品 SKU 旁添加提货券支付按钮，由钱包转入所需资产。",
     },
     merchant: {
-      en: "Maps SKU COFFEE-001 to an ERC-20 voucher binding and vault.",
-      zh: "把 SKU COFFEE-001 映射到 ERC-20 提货券 binding 和收券 vault。",
+      en: "Publishes the voucher requirement and receiving vault for the product.",
+      zh: "发布商品所需的提货券要求和收券 vault。",
     },
     customer: {
-      en: "Connects an EIP-1193 wallet and sends the voucher asset to the merchant vault.",
-      zh: "连接 EIP-1193 钱包，并把提货券资产转入商户 vault。",
+      en: "Connects a wallet, sends the voucher asset, and returns to a paid order.",
+      zh: "连接钱包、转入提货券资产，并返回已付款订单。",
     },
     result: {
-      en: "RedeemLoop rechecks the receipt and posts mark-as-paid to commerce.",
-      zh: "RedeemLoop 复核 receipt，并把 mark-as-paid 发给电商系统。",
+      en: "The commerce backend receives a signed mark-as-paid event.",
+      zh: "电商后台收到签名的 mark-as-paid 事件。",
     },
     steps: {
-      en: ["Asset Binding", "Create PaymentIntent", "Wallet transfer", "EVM receipt recheck", "Webhook delivery"],
-      zh: ["资产绑定", "创建 PaymentIntent", "钱包转券", "EVM receipt 复核", "Webhook 投递"],
+      en: ["Asset binding", "PaymentIntent", "Wallet transfer", "Receipt check", "Order paid"],
+      zh: ["资产绑定", "PaymentIntent", "钱包转券", "收券确认", "订单已支付"],
     },
     metrics: [
       {
@@ -222,7 +327,7 @@ export const scenarios: Scenario[] = [
       },
       {
         label: { en: "Commerce", zh: "电商适配" },
-        value: "Woo / Shopify alpha",
+        value: "Woo / Shopify",
       },
     ],
   },
@@ -233,28 +338,28 @@ export const scenarios: Scenario[] = [
       zh: "Pilot API",
     },
     title: {
-      en: "POS QR payment",
+      en: "POS QR checkout",
       zh: "POS QR 收银",
     },
     summary: {
-      en: "A terminal creates a token-scoped hosted payment URL for an in-store order.",
-      zh: "收银终端为线下订单创建带 token 的 hosted payment URL。",
+      en: "Create a token-scoped payment URL for an in-store order and show it as a QR code.",
+      zh: "为门店订单创建带 token 的付款链接，并以二维码展示。",
     },
     merchant: {
-      en: "Registers the terminal and signs POS payment creation with terminal nonce protection.",
-      zh: "注册终端，并用 terminal nonce 防止重复创建 POS payment。",
+      en: "Registers a terminal and creates a one-order hosted payment URL.",
+      zh: "登记终端，并为单笔订单创建 hosted payment URL。",
     },
     customer: {
-      en: "Scans the QR code and opens `/pay/:intentId?token=...` on a wallet-enabled phone.",
-      zh: "扫码打开 `/pay/:intentId?token=...`，在手机钱包中付款。",
+      en: "Scans the QR code and pays from a wallet-enabled phone.",
+      zh: "用户扫码后在手机钱包里完成支付。",
     },
     result: {
-      en: "The terminal polls the same PaymentIntent until settlement is confirmed.",
-      zh: "终端轮询同一个 PaymentIntent，直到 settlement 确认。",
+      en: "The terminal can poll the same PaymentIntent until receipt is confirmed.",
+      zh: "终端轮询同一条 PaymentIntent，直到收券确认。",
     },
     steps: {
-      en: ["Terminal registration", "POS PaymentIntent", "Hosted URL", "Customer wallet", "Terminal reconciliation"],
-      zh: ["终端注册", "POS PaymentIntent", "Hosted URL", "用户钱包", "终端对账"],
+      en: ["Terminal", "QR URL", "Wallet", "Receipt", "Paid signal"],
+      zh: ["终端", "二维码链接", "钱包", "收券", "付款信号"],
     },
     metrics: [
       {
@@ -274,28 +379,28 @@ export const scenarios: Scenario[] = [
       zh: "Pilot API",
     },
     title: {
-      en: "Livestream short-link",
+      en: "Livestream short link",
       zh: "直播带货短链",
     },
     summary: {
-      en: "A livestream host shares a short checkout link tied to a single voucher-backed SKU.",
-      zh: "直播间分享一个绑定提货券 SKU 的短 checkout 链接。",
+      en: "Share a short hosted checkout link tied to one voucher-backed SKU.",
+      zh: "分享绑定单个提货券 SKU 的 hosted checkout 短链。",
     },
     merchant: {
-      en: "Creates `/s/:slug?token=...` with expiry, SKU lines, binding ID, and order metadata.",
-      zh: "创建带有效期、SKU lines、binding ID 和订单元数据的 `/s/:slug?token=...`。",
+      en: "Creates an expiring short link with order metadata and a voucher binding.",
+      zh: "创建带有效期、订单元数据和提货券 binding 的短链。",
     },
     customer: {
-      en: "Opens the link without receiving a merchant API key or admin credential.",
-      zh: "用户打开短链，但不会拿到商户 API key 或管理凭证。",
+      en: "Opens the link without receiving merchant credentials or admin access.",
+      zh: "用户打开短链，但不会接触商户凭证或后台权限。",
     },
     result: {
-      en: "The same settlement and webhook loop handles payment completion.",
-      zh: "同一条 settlement 与 webhook 链路完成付款闭环。",
+      en: "The same receipt and commerce callback loop completes the sale.",
+      zh: "同一套收券和电商回调闭环完成交易。",
     },
     steps: {
-      en: ["Short-link intent", "Token-scoped session", "Wallet transfer", "Public recheck", "Commerce update"],
-      zh: ["短链 intent", "Token-scoped session", "钱包转券", "Public recheck", "电商更新"],
+      en: ["Short link", "Hosted checkout", "Wallet", "Receipt", "Commerce callback"],
+      zh: ["短链", "Hosted checkout", "钱包", "收券", "电商回调"],
     },
     metrics: [
       {
@@ -316,27 +421,27 @@ export const scenarios: Scenario[] = [
     },
     title: {
       en: "Merchant operations",
-      zh: "商户运营后台",
+      zh: "商户运营",
     },
     summary: {
-      en: "Operators inspect vaults, bindings, PaymentIntents, webhook deliveries, and audit events.",
-      zh: "运营人员查看 vault、binding、PaymentIntent、webhook delivery 和 audit event。",
+      en: "Inspect vaults, bindings, PaymentIntents, webhook deliveries, and audit events.",
+      zh: "查看 vault、binding、PaymentIntent、webhook delivery 和 audit event。",
     },
     merchant: {
-      en: "Uses the local admin console to seed a binding and inspect delivery failures.",
-      zh: "使用本地 admin console 创建 pilot binding 并排查投递失败。",
+      en: "Uses the admin console to seed a pilot setup and replay failed delivery.",
+      zh: "通过后台创建 pilot 配置，并重放失败的投递。",
     },
     customer: {
-      en: "Sees only the hosted payment page or embedded button, not the admin surface.",
-      zh: "用户只看到 hosted payment page 或嵌入式按钮，看不到后台。",
+      en: "Only sees the hosted payment page or embedded tender button.",
+      zh: "用户只看到 hosted payment page 或嵌入式支付按钮。",
     },
     result: {
-      en: "Webhook replay and audit logs make pilot support traceable.",
-      zh: "Webhook replay 和 audit logs 让 pilot 支持可以追踪。",
+      en: "Support teams get a traceable payment and delivery history.",
+      zh: "支持团队获得可追踪的付款和投递历史。",
     },
     steps: {
-      en: ["Seed merchant", "Verify vault", "Watch intents", "Replay webhook", "Inspect audit log"],
-      zh: ["创建商户数据", "验证 vault", "查看 intent", "重放 webhook", "检查 audit log"],
+      en: ["Vault", "Binding", "Intent", "Webhook", "Audit"],
+      zh: ["Vault", "Binding", "Intent", "Webhook", "Audit"],
     },
     metrics: [
       {
@@ -351,16 +456,18 @@ export const scenarios: Scenario[] = [
   },
 ];
 
-export const readinessRows = [
+export const scenarios = useCases;
+
+export const readinessRows: IntegrationRail[] = [
   {
     rail: "EVM ERC-20",
-    status: { en: "Integration beta", zh: "集成 beta" },
-    scope: { en: "ETH, BSC, Polygon PoS, Arbitrum One", zh: "ETH、BSC、Polygon PoS、Arbitrum One" },
+    status: { en: "Pilot beta", zh: "Pilot beta" },
+    scope: { en: "Ethereum, BNB Smart Chain, Polygon PoS, Arbitrum One", zh: "Ethereum、BNB Smart Chain、Polygon PoS、Arbitrum One" },
     next: { en: "Funded wallet certification", zh: "真实钱包付费认证" },
   },
   {
     rail: "WooCommerce",
-    status: { en: "Sandbox plugin", zh: "Sandbox 插件" },
+    status: { en: "Sandbox alpha", zh: "Sandbox alpha" },
     scope: { en: "Gateway settings, SKU mapping, webhook mark-as-paid", zh: "支付设置、SKU 映射、webhook mark-as-paid" },
     next: { en: "Real WordPress runtime certification", zh: "真实 WordPress 运行认证" },
   },
@@ -374,11 +481,11 @@ export const readinessRows = [
     rail: "Bitcoin Rune",
     status: { en: "Adapter beta", zh: "Adapter beta" },
     scope: { en: "UniSat, Xverse, Xverse indexer adapter, API recheck", zh: "UniSat、Xverse、Xverse indexer adapter、API recheck" },
-    next: { en: "Funded UniSat/Xverse flow", zh: "有资金的 UniSat/Xverse 流程" },
+    next: { en: "Funded UniSat or Xverse flow", zh: "有资金的 UniSat 或 Xverse 流程" },
   },
   {
     rail: "Fractal / Inscription / NFT",
-    status: { en: "Mocked alpha boundary", zh: "Mocked alpha 边界" },
+    status: { en: "Adapter alpha", zh: "Adapter alpha" },
     scope: { en: "Stable adapter shapes, not live certified", zh: "稳定 adapter 形态，未做真实认证" },
     next: { en: "Indexer and wallet partner tests", zh: "索引器和钱包伙伴测试" },
   },
@@ -389,6 +496,9 @@ export const quickStartCommands = ["pnpm install", "pnpm verify", "pnpm api:dev"
 export const repoLinks = {
   github: "https://github.com/RedeemLoopProtocol/redeemloop-protocol",
   docs: "https://github.com/RedeemLoopProtocol/redeemloop-protocol/tree/main/docs",
+  api: "https://github.com/RedeemLoopProtocol/redeemloop-protocol/blob/main/docs/API_REFERENCE.md",
+  boundary: "https://github.com/RedeemLoopProtocol/redeemloop-protocol/blob/main/docs/BOUNDARY.md",
   integration: "https://github.com/RedeemLoopProtocol/redeemloop-protocol/blob/main/docs/INTEGRATION_GUIDE.md",
   releases: "https://github.com/RedeemLoopProtocol/redeemloop-protocol/releases",
+  sandbox: "https://github.com/RedeemLoopProtocol/redeemloop-protocol/blob/main/docs/PUBLIC_SANDBOX.md",
 };
